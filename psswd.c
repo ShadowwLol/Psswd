@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <unistd.h>
 
+#define LINE_MAX 3072
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
 
 char * path;
@@ -22,11 +23,11 @@ int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 	if (!fp)
 		return 1;
 
-	char line[1024];
+	char line[LINE_MAX];
 
 	int done = 0;
 
-	while (fgets(line, 1024, fp)) {
+	while (fgets(line, LINE_MAX, fp)) {
 		int ll = strlen(line);
 		line[--ll] = '\0'; // Removes the \n
 
@@ -41,11 +42,9 @@ int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 					strcpy((char *)tag, line + 1);
 				}
 				else if (done == 4){
-					printf("Getting cp_lenP\n");
 					strcpy((char *)cp_len_strP, line+1);
 				}
 				else if (done == 5){
-					printf("Getting tagP\n");
 					strcpy((char *)tagP, line+1);
 				}
 				else{
@@ -214,7 +213,7 @@ void help(){
 }
 
 void add(char * website){
-	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "[-] Error: account too short.\n"); exit(1);}
+	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: account too short.\033[0m\n"); exit(1);}
 	char username[1024];
 	char password[1024];
 
@@ -235,16 +234,14 @@ void add(char * website){
 
 	printf("./Psswd {%s}\n", website);
 	strcat(path, website);
-	if (access( path, F_OK ) == 0){fprintf(stderr, "[-] Error: Account already exists.\n"); exit(1);}
+	if (access( path, F_OK ) == 0){fprintf(stderr, "\033[31m[-] Error: Account already exists.\033[0m\n"); exit(1);}
 	printf("Username: ");
 	fgets(username, 1024, stdin);
 	printf("Password: ");
 	fgets(password, 1024, stdin);
-	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){fprintf(stderr, "[-] Error: Username or password too short.\n"); exit(1);}
+	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: Username or password too short.\033[0m\n"); exit(1);}
 	username[strlen(username)-1] = '\0';
 	password[strlen(password)-1] = '\0';
-	printf("Username: [%s]\n", username);
-	printf("Password: [%s]\n", password);
 	//Encrypting username
 	cpu_len = gcm_encrypt(username, strlen(username), aad, strlen(aad), key, iv, strlen(iv), cipherUsername, Utag);
 	cpp_len = gcm_encrypt(password, strlen(password), aad, strlen(aad), key, iv, strlen(iv), cipherPassword, Ptag);
@@ -262,6 +259,7 @@ void add(char * website){
 	fputs("/", fp);
 	BIO_dump_fp(fp, Ptag, 14);
 	fclose(fp);
+	printf("\033[32m[+] Successfully added [%s] account.\033[0m\n", path);
 	exit(0);
 }
 
@@ -308,7 +306,6 @@ void retrieve(){
 	fread(input, sizeof(char),  1, stdin);
 	if (atoi(input) && atoi(input) <= n){strcat(path, files[atoi(input)-1]);}
 	else{exit(1);}
-	printf("FILE: %s\n", path);
 	unsigned char ciphertext[1024];
 	unsigned char tag[1024];
 	char cp_len_str[1024];
@@ -319,7 +316,6 @@ void retrieve(){
 	read_cipher(ciphertext, cp_len_str, tag, path, ciphertextP, cp_len_strP, tagP);
 	int cp_len = atoi(cp_len_str);
 	int cp_lenP = atoi(cp_len_strP);
-	printf("ciphertext : [%s]\ntag : [%s]\ncp_len: [%d]\nciphertextP: [%s]\ncp_lenP: [%d]\ntagP: [%s]\n", ciphertext, tag, cp_len, ciphertextP, cp_lenP, tagP);
 	// Defining the aad, key and iv
 	static const unsigned char key[] = "01234567890123456789012345678901";
 	/* A 128 bit IV */
@@ -336,6 +332,7 @@ void retrieve(){
 	decryptedtext[cp_len] = '\0';
 	decryptedtextP[cp_lenP] = '\0';
 	printf("Username: [%s]\nPassword: [%s]\n", decryptedtext, decryptedtextP);
+	printf("\033[32m[+] Successfully retrieved [%s] account credentials.\033[0m\n", path);
 	exit(0);
 }
 
@@ -383,7 +380,7 @@ void delete(){
 	if (atoi(input) && atoi(input) <= n){strcat(path, files[atoi(input)-1]);}
 	else{exit(1);}
 	remove(path);
-	printf("[+] Successfully deleted [%s] account.\n", path);
+	printf("\033[32m[+] Successfully deleted [%s] account.\033[0m\n", path);
 	exit(0);
 }
 
@@ -395,9 +392,8 @@ int main(int argc, char * argv[]){
 	path = getenv("HOME");
 	char * dir[19];
 	struct stat st = {0};
-	strcpy(dir, "/.config/Psswd/accounts/");
+	strcpy(dir, "/.config/Psswd/");
 	strcat(path, dir);
-	printf("PATH: %s", path);
 	if (stat(path, &st) == -1){mkdir(path, 0700);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
 	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(strdup(argv[2]));}
@@ -459,24 +455,26 @@ int main(int argc, char * argv[]){
 		ERR_free_strings();
 	}else if (atoi(input) == 2){
 	// enc dec string in file
-		unsigned char ciphertext[1024];
-		unsigned char tag[1024];
-		char cp_len_str[1024];
+		unsigned char ciphertext[LINE_MAX];
+		unsigned char tag[LINE_MAX];
+		char cp_len_str[LINE_MAX];
 		char * path = "file.enc";
 		FILE * fp = fopen(path, "r");
 		static const unsigned char key[] = "01234567890123456789012345678901";
 		static const unsigned char iv[] = "0123456789012345";
 		static const unsigned char aad[] = "Some AAD data";
 		char line[3072];
-		unsigned char decryptedtext[1024];
+		unsigned char decryptedtext[LINE_MAX];
 		int decryptedtext_len;
 		if (read_cipher(ciphertext, cp_len_str, tag, path)) {
 			fprintf(stderr, "Error parsing the file\n");
 			return 1;
 		}
+
 		int cp_len = atoi(cp_len_str);
 		// Decrypt
 		decryptedtext_len = gcm_decrypt(ciphertext, cp_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
+
 		printf("RECOVERED CREDENTIALS FROM FILE:\n");
 		printf("Ciphertext: %s\nCiphertext_len: %d\nTag: %s\n", ciphertext, cp_len, tag);
 		decryptedtext[decryptedtext_len] = '\0';

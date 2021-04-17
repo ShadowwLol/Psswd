@@ -9,7 +9,6 @@
 #include <dirent.h>
 #include <unistd.h>
 
-#define LINE_MAX 3072
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
 
 char * path;
@@ -23,11 +22,11 @@ int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 	if (!fp)
 		return 1;
 
-	char line[LINE_MAX];
+	char line[1024];
 
 	int done = 0;
 
-	while (fgets(line, LINE_MAX, fp)) {
+	while (fgets(line, 1024, fp)) {
 		int ll = strlen(line);
 		line[--ll] = '\0'; // Removes the \n
 
@@ -396,8 +395,9 @@ int main(int argc, char * argv[]){
 	path = getenv("HOME");
 	char * dir[19];
 	struct stat st = {0};
-	strcpy(dir, "/.config/Psswd/");
+	strcpy(dir, "/.config/Psswd/accounts/");
 	strcat(path, dir);
+	printf("PATH: %s", path);
 	if (stat(path, &st) == -1){mkdir(path, 0700);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
 	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(strdup(argv[2]));}
@@ -459,26 +459,24 @@ int main(int argc, char * argv[]){
 		ERR_free_strings();
 	}else if (atoi(input) == 2){
 	// enc dec string in file
-		unsigned char ciphertext[LINE_MAX];
-		unsigned char tag[LINE_MAX];
-		char cp_len_str[LINE_MAX];
+		unsigned char ciphertext[1024];
+		unsigned char tag[1024];
+		char cp_len_str[1024];
 		char * path = "file.enc";
 		FILE * fp = fopen(path, "r");
 		static const unsigned char key[] = "01234567890123456789012345678901";
 		static const unsigned char iv[] = "0123456789012345";
 		static const unsigned char aad[] = "Some AAD data";
 		char line[3072];
-		unsigned char decryptedtext[LINE_MAX];
+		unsigned char decryptedtext[1024];
 		int decryptedtext_len;
 		if (read_cipher(ciphertext, cp_len_str, tag, path)) {
 			fprintf(stderr, "Error parsing the file\n");
 			return 1;
 		}
-
 		int cp_len = atoi(cp_len_str);
 		// Decrypt
 		decryptedtext_len = gcm_decrypt(ciphertext, cp_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
-
 		printf("RECOVERED CREDENTIALS FROM FILE:\n");
 		printf("Ciphertext: %s\nCiphertext_len: %d\nTag: %s\n", ciphertext, cp_len, tag);
 		decryptedtext[decryptedtext_len] = '\0';

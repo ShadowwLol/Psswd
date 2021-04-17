@@ -340,7 +340,50 @@ void retrieve(){
 }
 
 void delete(){
-	printf("./Psswd\nDelete\n");
+	printf("./Psswd\nDelete an account\n");
+	int n=0, i=0;
+	DIR *d;
+	struct dirent *dir;
+	d = opendir(path);
+
+	//Determine the number of files
+	while((dir = readdir(d)) != NULL) {
+		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )
+		{
+
+		} else {
+			n++;
+		}
+	}
+	rewinddir(d);
+	if (n < 1){ exit(1); }
+
+	char *files[n];
+
+	//Put file names into the array
+	while((dir = readdir(d)) != NULL) {
+		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )
+		{}
+		else {
+			files[i]= dir->d_name;
+			i++;
+		}
+	}
+	rewinddir(d);
+
+	for(i=0; i<n; i++){
+		printf("%d. [%s]\n", i+1, files[i]);
+	}
+	char * input[1];
+	FILE * file;
+	char * data[2048];
+	printf("\n> ");
+	fflush(stdin);
+	fread(input, sizeof(char),  1, stdin);
+	if (atoi(input) && atoi(input) <= n){strcat(path, files[atoi(input)-1]);}
+	else{exit(1);}
+	remove(path);
+	printf("[+] Successfully deleted [%s] account.\n", path);
 	exit(0);
 }
 

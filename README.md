@@ -1,10 +1,13 @@
 # Psswd
-A bulletproof password manager featuring AES256 encryption.
+A unix password manager featuring AES256 GCM encryption.
 ## [WIP]
-## Current features:
-* Complete AES256 encryption
+## Features:
+* Quick AES256 GCM encryption
+* Completely offline
+* Master password usage
+* Easy exporting and importing
 
 ## TODO:
-* Add import instructions and export function
+* Add importing and exporting functionality
 * Implement the delete() function
-* remove unnecessary code
+* Implement Master Password usage

@@ -283,6 +283,7 @@ void retrieve(){
 		}
 	}
 	rewinddir(d);
+	if (n < 1){ exit(1); }
 
 	char *files[n];
 

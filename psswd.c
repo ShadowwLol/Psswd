@@ -1,5 +1,6 @@
 #include <openssl/evp.h>
 #include <openssl/aes.h>
+#include <assert.h>
 #include <openssl/err.h>
 #include <string.h>
 #include <stdio.h>
@@ -13,6 +14,21 @@
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
 
 char * path;
+
+int mkpath(char* file_path, mode_t mode) {
+	assert(file_path && *file_path);
+	for (char* p = strchr(file_path + 1, '/'); p; p = strchr(p + 1, '/')) {
+		*p = '\0';
+		if (mkdir(file_path, mode) == -1) {
+			if (errno != EEXIST) {
+				*p = '/';
+				return -1;
+			}
+		}
+		*p = '/';
+	}
+	return 0;
+}
 
 int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, char *path, char * ciphertextP, char * cp_len_strP, unsigned char * tagP) {
 	if (!ciphertext || !cp_len || !tag || !path || !ciphertextP || !cp_len_strP || !tagP)
@@ -214,6 +230,23 @@ void help(){
 
 void add(char * website){
 	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: account too short.\033[0m\n"); exit(1);}
+
+	printf("./Psswd {%s}\n", website);
+
+	// Verification
+	int lives = 0;
+	mpcheck:
+	if (lives < 3){
+		printf("\nMaster password: ");
+		char try[1024];
+		fgets(try, 1024, stdin);
+		try[strlen(try)-1] = '\0';
+		if (strncmp(try, "shadoww", 1024) != 0){
+			lives ++;
+			goto mpcheck;
+		}
+	}else{fprintf(stderr, "[-] Error: Max ammount of tries exceeded.\n"); exit(1);}
+
 	char username[1024];
 	char password[1024];
 
@@ -232,7 +265,6 @@ void add(char * website){
 	int cpp_len = 0;
 	unsigned char Ptag[16];
 
-	printf("./Psswd {%s}\n", website);
 	strcat(path, website);
 	if (access( path, F_OK ) == 0){fprintf(stderr, "\033[31m[-] Error: Account already exists.\033[0m\n"); exit(1);}
 	printf("Username: ");
@@ -281,6 +313,20 @@ void retrieve(){
 	}
 	rewinddir(d);
 	if (n < 1){ exit(1); }
+
+	// Verification
+	int lives = 0;
+	mpcheck:
+	if (lives < 3){
+		printf("\nMaster password: ");
+		char try[1024];
+		fgets(try, 1024, stdin);
+		try[strlen(try)-1] = '\0';
+		if (strncmp(try, "shadoww", 1024) != 0){
+			lives ++;
+			goto mpcheck;
+		}
+	}else{fprintf(stderr, "[-] Error: Max ammount of tries exceeded.\n"); exit(1);}
 
 	char *files[n];
 
@@ -392,9 +438,9 @@ int main(int argc, char * argv[]){
 	path = getenv("HOME");
 	char * dir[19];
 	struct stat st = {0};
-	strcpy(dir, "/.config/Psswd/");
+	strcpy(dir, "/.config/Psswd/accounts/");
 	strcat(path, dir);
-	if (stat(path, &st) == -1){mkdir(path, 0700);}
+	if (stat(path, &st) == -1){mkpath(path, 0755);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
 	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(strdup(argv[2]));}
 	else if (strcmp(argv[1], "r") == 0){retrieve();}

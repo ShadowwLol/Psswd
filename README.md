@@ -9,7 +9,9 @@ A unix password manager featuring AES256 GCM encryption.
 
 ## TODO:
 * Add importing and exporting functionality
-* Implement Master Password usage
+* Randomizing keys
+* Encrypting Master Password
+* Disabling echo
 
 ## Compiling:
 * `make all`

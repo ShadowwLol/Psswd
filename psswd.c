@@ -13,8 +13,6 @@
 #define LINE_MAX 3072
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
 
-char * path;
-
 int mkpath(char* file_path, mode_t mode) {
 	assert(file_path && *file_path);
 	for (char* p = strchr(file_path + 1, '/'); p; p = strchr(p + 1, '/')) {
@@ -223,15 +221,40 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 	}
 }
 
-void help(){
-	printf("./Psswd\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr	 \tRetrieves an account.\n\t\td, del\tDeletes an account.\n");
-	exit(0);
+int pStartup(char * p, char * mP, char * mPS){
+	char pass1[1024];
+	char pass2[1024];
+
+	printf("[+] Successfully built Psswd.\n");
+	mkpath(p, 0755);
+	printf("./Psswd\n");
+	pst:
+	printf("Enter Master Password: ");
+	fgets(mPS, 1024, stdin);
+	if (strlen(mPS) < 3){ fprintf(stderr, "\033[31m[-] Error: Master Password too short.\033[0m\n"); goto pst;}
+	strcpy(pass1, mPS);
+	printf("Re-enter Master Password: ");
+	fgets(mPS, 1024, stdin);
+	strcpy(pass2, mPS);
+	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "[-] Error: passwords do not match."); goto pst;}
+	mPS[strlen(mPS)-1] = '\0';
+	FILE * fptr = fopen(mP, "w");
+	printf("opened : %s\n", mP);
+	fputs(mPS, fptr);
+	fclose(fptr);
+	return 0;
 }
 
-void add(char * website){
-	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: account too short.\033[0m\n"); exit(1);}
-
-	printf("./Psswd {%s}\n", website);
+int pLoad(char * mP, char * mPS){
+	char line[1024];
+	char pass1[1024];
+	printf("[+] Successfully loaded Psswd.\n");
+	FILE * fptr = fopen(mP, "r");
+	while (fgets(line, 1024, fptr)){}
+	fclose(fptr);
+	printf("line : %s\n", line);
+	strcpy(mPS, line);
+	printf("mPS : %s\n", mPS);
 
 	// Verification
 	int lives = 0;
@@ -241,11 +264,25 @@ void add(char * website){
 		char try[1024];
 		fgets(try, 1024, stdin);
 		try[strlen(try)-1] = '\0';
-		if (strncmp(try, "shadoww", 1024) != 0){
+		if (strcmp(try, mPS) != 0){
 			lives ++;
 			goto mpcheck;
 		}
 	}else{fprintf(stderr, "[-] Error: Max ammount of tries exceeded.\n"); exit(1);}
+	return 0;
+}
+
+void help(){
+	printf("./Psswd\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr	 \tRetrieves an account.\n\t\td, del\tDeletes an account.\n");
+	exit(0);
+}
+
+void add(char P[], char * website){
+	printf("HELLO\n");
+	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: account too short.\033[0m\n"); exit(1);}
+
+	printf("./Psswd {%s}\n", website);
+
 
 	char username[1024];
 	char password[1024];
@@ -265,8 +302,8 @@ void add(char * website){
 	int cpp_len = 0;
 	unsigned char Ptag[16];
 
-	strcat(path, website);
-	if (access( path, F_OK ) == 0){fprintf(stderr, "\033[31m[-] Error: Account already exists.\033[0m\n"); exit(1);}
+	strcat(P, website);
+	if (access( P, F_OK ) == 0){fprintf(stderr, "\033[31m[-] Error: Account already exists.\033[0m\n"); exit(1);}
 	printf("Username: ");
 	fgets(username, 1024, stdin);
 	printf("Password: ");
@@ -277,7 +314,7 @@ void add(char * website){
 	//Encrypting username
 	cpu_len = gcm_encrypt(username, strlen(username), aad, strlen(aad), key, iv, strlen(iv), cipherUsername, Utag);
 	cpp_len = gcm_encrypt(password, strlen(password), aad, strlen(aad), key, iv, strlen(iv), cipherPassword, Ptag);
-	FILE * fp = fopen(path, "w");
+	FILE * fp = fopen(P, "w");
 	fprintf(fp, "%s\n", cipherUsername);
 	fputs("/", fp);
 	fprintf(fp, "%d\n", cpu_len);
@@ -291,16 +328,16 @@ void add(char * website){
 	fputs("/", fp);
 	BIO_dump_fp(fp, Ptag, 14);
 	fclose(fp);
-	printf("\033[32m[+] Successfully added [%s] account.\033[0m\n", path);
+	printf("\033[32m[+] Successfully added [%s] account.\033[0m\n", P);
 	exit(0);
 }
 
-void retrieve(){
+void retrieve(char P[]){
 	printf("./Psswd\nRetrieve an account.\n");
 	int n=0, i=0;
 	DIR *d;
 	struct dirent *dir;
-	d = opendir(path);
+	d = opendir(P);
 
 	//Determine the number of files
 	while((dir = readdir(d)) != NULL) {
@@ -313,20 +350,6 @@ void retrieve(){
 	}
 	rewinddir(d);
 	if (n < 1){ exit(1); }
-
-	// Verification
-	int lives = 0;
-	mpcheck:
-	if (lives < 3){
-		printf("\nMaster password: ");
-		char try[1024];
-		fgets(try, 1024, stdin);
-		try[strlen(try)-1] = '\0';
-		if (strncmp(try, "shadoww", 1024) != 0){
-			lives ++;
-			goto mpcheck;
-		}
-	}else{fprintf(stderr, "[-] Error: Max ammount of tries exceeded.\n"); exit(1);}
 
 	char *files[n];
 
@@ -350,7 +373,7 @@ void retrieve(){
 	printf("\n> ");
 	fflush(stdin);
 	fread(input, sizeof(char),  1, stdin);
-	if (atoi(input) && atoi(input) <= n){strcat(path, files[atoi(input)-1]);}
+	if (atoi(input) && atoi(input) <= n){strcat(P, files[atoi(input)-1]);}
 	else{exit(1);}
 	unsigned char ciphertext[1024];
 	unsigned char tag[1024];
@@ -359,7 +382,7 @@ void retrieve(){
 	unsigned char ciphertextP[1024];
 	unsigned char tagP[1024];
 	char cp_len_strP[1024];
-	read_cipher(ciphertext, cp_len_str, tag, path, ciphertextP, cp_len_strP, tagP);
+	read_cipher(ciphertext, cp_len_str, tag, P, ciphertextP, cp_len_strP, tagP);
 	int cp_len = atoi(cp_len_str);
 	int cp_lenP = atoi(cp_len_strP);
 	// Defining the aad, key and iv
@@ -378,16 +401,16 @@ void retrieve(){
 	decryptedtext[cp_len] = '\0';
 	decryptedtextP[cp_lenP] = '\0';
 	printf("Username: [%s]\nPassword: [%s]\n", decryptedtext, decryptedtextP);
-	printf("\033[32m[+] Successfully retrieved [%s] account credentials.\033[0m\n", path);
+	printf("\033[32m[+] Successfully retrieved [%s] account credentials.\033[0m\n", P);
 	exit(0);
 }
 
-void delete(){
+void delete(char p[]){
 	printf("./Psswd\nDelete an account\n");
 	int n=0, i=0;
 	DIR *d;
 	struct dirent *dir;
-	d = opendir(path);
+	d = opendir(p);
 
 	//Determine the number of files
 	while((dir = readdir(d)) != NULL) {
@@ -423,10 +446,10 @@ void delete(){
 	printf("\n> ");
 	fflush(stdin);
 	fread(input, sizeof(char),  1, stdin);
-	if (atoi(input) && atoi(input) <= n){strcat(path, files[atoi(input)-1]);}
+	if (atoi(input) && atoi(input) <= n){strcat(p, files[atoi(input)-1]);}
 	else{exit(1);}
-	remove(path);
-	printf("\033[32m[+] Successfully deleted [%s] account.\033[0m\n", path);
+	remove(p);
+	printf("\033[32m[+] Successfully deleted [%s] account.\033[0m\n", p);
 	exit(0);
 }
 
@@ -435,16 +458,26 @@ int main(int argc, char * argv[]){
 		fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n");
 		exit(1);
 	}
+	char * path;
+	char  * masterPath;
+	masterPath = getenv("HOME");
 	path = getenv("HOME");
-	char * dir[19];
+	char masterP[1024];
+	char P[1024];
+	printf("path : [%s], masterPath : [%s]\n", path, masterPath);
 	struct stat st = {0};
-	strcpy(dir, "/.config/Psswd/accounts/");
-	strcat(path, dir);
-	if (stat(path, &st) == -1){mkpath(path, 0755);}
+	struct stat buffer;
+	strcpy(P, path);
+	strcat(P, "/.config/Psswd/accounts/");
+	strcpy(masterP, masterPath);
+	strcat(masterP, "/.config/Psswd/details");
+	printf("path : [%s], masterPath : [%s]\n", P, masterP);
+	char * mPS; // Master Password                                No password                 /      With Password
+	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS);}else{pLoad(masterP, &mPS);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
-	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(strdup(argv[2]));}
-	else if (strcmp(argv[1], "r") == 0){retrieve();}
-	else if (strcmp(argv[1], "d") == 0 || strcmp(argv[1], "del") == 0){delete();}
+	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(P, strdup(argv[2]));}
+	else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P);}
+	else if (strcmp(argv[1], "d") == 0 || strcmp(argv[1], "del") == 0){delete(P);}
 	else{
 		fprintf(stderr, "\033[31m[-] Error: invalid arguments.\033[0m\nCheck \"./Psswd help\" for help.\n");
 		exit(1);

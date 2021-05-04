@@ -6,7 +6,7 @@ SRCDIR = ./src/
 SOURCES = $(SRCDIR)*.c
 
 debug:
-	rm Psswd; $(CC) $(SOURCES) $(DFLAGS) -o Psswd ; ./Psswd
+	rm -f Psswd; $(CC) $(SOURCES) $(DFLAGS) -o Psswd ; ./Psswd
 
 all:
-	rm Psswd; $(CC) $(SOURCES) $(CFLAGS) -o Psswd ; ./Psswd
+	rm -f Psswd; $(CC) $(SOURCES) $(CFLAGS) -o Psswd ; ./Psswd

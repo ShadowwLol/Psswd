@@ -28,6 +28,44 @@ int mkpath(char* file_path, mode_t mode) {
 	return 0;
 }
 
+int read_master(unsigned char *ciphertext, char *cp_len, unsigned char *tag, char *path) {
+    if (!ciphertext || !cp_len || !tag || !path)
+        return 1;
+
+    FILE *fp = fopen(path, "r");
+
+    if (!fp)
+        return 1;
+
+    char line[LINE_MAX];
+
+    int done = 0;
+
+    while (fgets(line, LINE_MAX, fp)) {
+        int ll = strlen(line);
+        line[--ll] = '\0'; // Removes the \n
+
+        if (ll > 0) {
+            if (done == 0)
+                strcpy((char *)ciphertext, line); // Buffer overflow if ciphertext can't store the entire line
+            else if (line[0] == '/') {
+                if (done == 1)
+                    strcpy(cp_len, line + 1); // + 1 to ignore the / at the start
+                else if (done == 2)
+                    strcpy((char *)tag, line + 1);
+                else
+                    continue;
+            }
+            done++;
+        }
+    }
+
+    if (done != 3)
+        return 1;
+
+    return 0;
+}
+
 int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, char *path, char * ciphertextP, char * cp_len_strP, unsigned char * tagP) {
 	if (!ciphertext || !cp_len || !tag || !path || !ciphertextP || !cp_len_strP || !tagP)
 		return 1;
@@ -236,12 +274,29 @@ int pStartup(char * p, char * mP, char * mPS){
 	printf("Re-enter Master Password: ");
 	fgets(mPS, 1024, stdin);
 	strcpy(pass2, mPS);
-	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "[-] Error: passwords do not match."); goto pst;}
+	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "[-] Error: passwords do not match.\n"); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
-	FILE * fptr = fopen(mP, "w");
-	printf("opened : %s\n", mP);
-	fputs(mPS, fptr);
-	fclose(fptr);
+
+	// Defining the aad, key and iv
+	static const unsigned char key[] = "01234567890123456789012345678901";
+	/* A 128 bit IV */
+	static const unsigned char iv[] = "0123456789012345";
+	/* Some additional data to be authenticated */
+	static const unsigned char aad[] = "Some AAD data";
+
+	unsigned char cipher[1024];
+	int cp_len = 0;
+	unsigned char tag[16];
+
+	//Encrypting Master Password
+	cp_len = gcm_encrypt(mPS, strlen(mPS), aad, strlen(aad), key, iv, strlen(iv), cipher, tag);
+	FILE * fp = fopen(mP, "w");
+	fprintf(fp, "%s\n", cipher);
+	fputs("/", fp);
+	fprintf(fp, "%d\n", cp_len);
+	fputs("/", fp);
+	BIO_dump_fp(fp, tag, 14);
+	fclose(fp);
 	return 0;
 }
 
@@ -252,9 +307,25 @@ int pLoad(char * mP, char * mPS){
 	FILE * fptr = fopen(mP, "r");
 	while (fgets(line, 1024, fptr)){}
 	fclose(fptr);
-	printf("line : %s\n", line);
 	strcpy(mPS, line);
-	printf("mPS : %s\n", mPS);
+
+	unsigned char ciphertext[1024];
+	unsigned char tag[1024];
+	char cp_len_str[1024];
+
+	read_master(ciphertext, cp_len_str, tag, mP);
+	int cp_len = atoi(cp_len_str);
+	// Defining the aad, key and iv
+	static const unsigned char key[] = "01234567890123456789012345678901";
+	/* A 128 bit IV */
+	static const unsigned char iv[] = "0123456789012345";
+	/* Some additional data to be authenticated */
+	static const unsigned char aad[] = "Some AAD data";
+	// Decrypting credentials
+	unsigned char decryptedtext[1024];
+	int decryptedtext_len;
+	decryptedtext_len = gcm_decrypt(ciphertext, cp_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
+	decryptedtext[cp_len] = '\0';
 
 	// Verification
 	int lives = 0;
@@ -264,7 +335,7 @@ int pLoad(char * mP, char * mPS){
 		char try[1024];
 		fgets(try, 1024, stdin);
 		try[strlen(try)-1] = '\0';
-		if (strcmp(try, mPS) != 0){
+		if (strcmp(try, decryptedtext) != 0){
 			lives ++;
 			goto mpcheck;
 		}
@@ -482,84 +553,5 @@ int main(int argc, char * argv[]){
 		fprintf(stderr, "\033[31m[-] Error: invalid arguments.\033[0m\nCheck \"./Psswd help\" for help.\n");
 		exit(1);
 	}
-
-	/*
-	char input[1];
-	printf("./Psswd\n");
-	printf("1. encrypt decrypt string\n2. encrypt decrypt string in file.\n> ");
-	fgets(input, 2, stdin);
-	if (atoi(input) == 1){
-		fflush(stdin);
-		getchar();
-		char * plaintext[1024];
-		printf("Enter string to be encrypted: ");
-		fgets(plaintext, 1024, stdin);
-		printf("plaintext: %s\n", plaintext);
-		printf("strlen(plaintext): %d\n", strlen(plaintext));
-		OpenSSL_add_all_algorithms();
-		ERR_load_crypto_strings();
-		static const unsigned char key[] = "01234567890123456789012345678901";
-		static const unsigned char iv[] = "0123456789012345";
-		static const unsigned char aad[] = "Some AAD data";
-		unsigned char ciphertext[3072];
-		unsigned char decryptedtext[3072];
-		unsigned char tag[16];
-		int decryptedtext_len = 0, ciphertext_len = 0;
-		ciphertext_len = gcm_encrypt(plaintext, strlen(plaintext), aad, strlen(aad), key, iv, strlen(iv), ciphertext, tag);
-		printf("Ciphertext is:\n");
-		BIO_dump_fp(stdout, ciphertext, ciphertext_len);
-		printf("Ciphertext var: %s, ciphertext_len: %d\n", ciphertext, ciphertext_len);
-		char * path = "file.enc";
-		FILE * fp = fopen(path, "w");
-		fprintf(fp, "%s\n", ciphertext);
-		//BIO_dump_fp(fp, ciphertext, ciphertext_len);
-		fputs("/", fp);
-		fprintf(fp, "%d\n", ciphertext_len);
-		fputs("/", fp);
-		BIO_dump_fp(fp, tag, 14);
-		fclose(fp);
-		printf("Tag is:\n");
-		BIO_dump_fp(stdout, tag, 14);
-		decryptedtext_len = gcm_decrypt(ciphertext, ciphertext_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
-		if(decryptedtext_len < 0)
-		{
-			printf("Decrypted text failed to verify\n");
-		}
-		else
-		{
-			decryptedtext[decryptedtext_len] = '\0';
-			printf("Decrypted text is:\n");
-			printf("%s\n", decryptedtext);
-		}
-		ERR_free_strings();
-	}else if (atoi(input) == 2){
-	// enc dec string in file
-		unsigned char ciphertext[LINE_MAX];
-		unsigned char tag[LINE_MAX];
-		char cp_len_str[LINE_MAX];
-		char * path = "file.enc";
-		FILE * fp = fopen(path, "r");
-		static const unsigned char key[] = "01234567890123456789012345678901";
-		static const unsigned char iv[] = "0123456789012345";
-		static const unsigned char aad[] = "Some AAD data";
-		char line[3072];
-		unsigned char decryptedtext[LINE_MAX];
-		int decryptedtext_len;
-		if (read_cipher(ciphertext, cp_len_str, tag, path)) {
-			fprintf(stderr, "Error parsing the file\n");
-			return 1;
-		}
-
-		int cp_len = atoi(cp_len_str);
-		// Decrypt
-		decryptedtext_len = gcm_decrypt(ciphertext, cp_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
-
-		printf("RECOVERED CREDENTIALS FROM FILE:\n");
-		printf("Ciphertext: %s\nCiphertext_len: %d\nTag: %s\n", ciphertext, cp_len, tag);
-		decryptedtext[decryptedtext_len] = '\0';
-		printf("Decrypted Text: %s\n", decryptedtext);
-		return 0;
-	}
-	*/
 	return 0;
 }

@@ -1,7 +1,7 @@
 CC = gcc
-DFLAGS = -I$(IDIR) -lcrypto -Wall -Wextra -Werror -pedantic
-CFLAGS = -I$(IDIR) -lcrypto
-IDIR = ./include/
+DFLAGS = -lcrypto -Wall -Wextra -Werror -pedantic
+CFLAGS = -lcrypto
+#IDIR = ./include/
 SRCDIR = ./src/
 SOURCES = $(SRCDIR)*.c
 

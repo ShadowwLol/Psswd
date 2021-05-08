@@ -10,7 +10,6 @@ A unix password manager featuring AES256 GCM encryption.
 ## TODO:
 * Add importing and exporting functionality
 * Randomizing keys
-* Disabling echo
 
 ## Compiling:
 * `make all`

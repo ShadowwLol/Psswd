@@ -9,9 +9,11 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <termios.h>
 
 #define LINE_MAX 3072
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
+
 
 int mkpath(char* file_path, mode_t mode) {
 	assert(file_path && *file_path);
@@ -259,7 +261,7 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 	}
 }
 
-int pStartup(char * p, char * mP, char * mPS){
+int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
 	char pass1[1024];
 	char pass2[1024];
 
@@ -274,15 +276,8 @@ int pStartup(char * p, char * mP, char * mPS){
 	printf("Re-enter Master Password: ");
 	fgets(mPS, 1024, stdin);
 	strcpy(pass2, mPS);
-	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "[-] Error: passwords do not match.\n"); goto pst;}
+	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "\033[31m[-] Error: passwords do not match.\033[0m\n"); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
-
-	// Defining the aad, key and iv
-	static const unsigned char key[] = "01234567890123456789012345678901";
-	/* A 128 bit IV */
-	static const unsigned char iv[] = "0123456789012345";
-	/* Some additional data to be authenticated */
-	static const unsigned char aad[] = "Some AAD data";
 
 	unsigned char cipher[1024];
 	int cp_len = 0;
@@ -300,7 +295,7 @@ int pStartup(char * p, char * mP, char * mPS){
 	return 0;
 }
 
-int pLoad(char * mP, char * mPS){
+int pLoad(char * mP, char * mPS, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
 	char line[1024];
 	char pass1[1024];
 	printf("[+] Successfully loaded Psswd.\n");
@@ -315,12 +310,6 @@ int pLoad(char * mP, char * mPS){
 
 	read_master(ciphertext, cp_len_str, tag, mP);
 	int cp_len = atoi(cp_len_str);
-	// Defining the aad, key and iv
-	static const unsigned char key[] = "01234567890123456789012345678901";
-	/* A 128 bit IV */
-	static const unsigned char iv[] = "0123456789012345";
-	/* Some additional data to be authenticated */
-	static const unsigned char aad[] = "Some AAD data";
 	// Decrypting credentials
 	unsigned char decryptedtext[1024];
 	int decryptedtext_len;
@@ -328,43 +317,42 @@ int pLoad(char * mP, char * mPS){
 	decryptedtext[cp_len] = '\0';
 
 	// Verification
+	// Echo management
+	struct termios saved_attributes;
+	struct termios term;
 	int lives = 0;
 	mpcheck:
 	if (lives < 3){
 		printf("\nMaster password: ");
+
+		tcgetattr(STDIN_FILENO,&saved_attributes);
+		term = saved_attributes;
+		term.c_lflag = term.c_lflag ^ ECHO;
+		tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
+
 		char try[1024];
 		fgets(try, 1024, stdin);
 		try[strlen(try)-1] = '\0';
 		if (strcmp(try, decryptedtext) != 0){
 			lives ++;
+			tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
 			goto mpcheck;
-		}
-	}else{fprintf(stderr, "[-] Error: Max ammount of tries exceeded.\n"); exit(1);}
+		}else{tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);}
+	}else{tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); fprintf(stderr, "\033[31m[-] Error: Max ammount of tries exceeded.\033[31m\n"); exit(1);}
 	return 0;
 }
 
 void help(){
-	printf("./Psswd\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr	 \tRetrieves an account.\n\t\td, del\tDeletes an account.\n");
+	printf("Help:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr	 \tRetrieves an account.\n\t\td, del\tDeletes an account.\n");
 	exit(0);
 }
 
-void add(char P[], char * website){
-	printf("HELLO\n");
+void add(char P[], char * website, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
 	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: account too short.\033[0m\n"); exit(1);}
 
-	printf("./Psswd {%s}\n", website);
-
-
+	printf("\nAdd a website {%s}\n", website);
 	char username[1024];
 	char password[1024];
-
-	// Defining the aad, key and iv
-	static const unsigned char key[] = "01234567890123456789012345678901";
-	/* A 128 bit IV */
-	static const unsigned char iv[] = "0123456789012345";
-	/* Some additional data to be authenticated */
-	static const unsigned char aad[] = "Some AAD data";
-
 	unsigned char cipherUsername[1024];
 	int cpu_len = 0;
 	unsigned char Utag[16];
@@ -378,7 +366,20 @@ void add(char P[], char * website){
 	printf("Username: ");
 	fgets(username, 1024, stdin);
 	printf("Password: ");
+
+	// Echo management
+	struct termios saved_attributes;
+	struct termios term;
+
+	tcgetattr(STDIN_FILENO,&saved_attributes);
+	term = saved_attributes;
+	term.c_lflag = term.c_lflag ^ ECHO;
+	tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
+
 	fgets(password, 1024, stdin);
+
+	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
+
 	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: Username or password too short.\033[0m\n"); exit(1);}
 	username[strlen(username)-1] = '\0';
 	password[strlen(password)-1] = '\0';
@@ -399,12 +400,12 @@ void add(char P[], char * website){
 	fputs("/", fp);
 	BIO_dump_fp(fp, Ptag, 14);
 	fclose(fp);
-	printf("\033[32m[+] Successfully added [%s] account.\033[0m\n", P);
+	printf("\n\033[32m[+] Successfully added [%s] account.\033[0m\n", P);
 	exit(0);
 }
 
-void retrieve(char P[]){
-	printf("./Psswd\nRetrieve an account.\n");
+void retrieve(char P[], const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
+	printf("\nRetrieve an account.\n");
 	int n=0, i=0;
 	DIR *d;
 	struct dirent *dir;
@@ -456,12 +457,6 @@ void retrieve(char P[]){
 	read_cipher(ciphertext, cp_len_str, tag, P, ciphertextP, cp_len_strP, tagP);
 	int cp_len = atoi(cp_len_str);
 	int cp_lenP = atoi(cp_len_strP);
-	// Defining the aad, key and iv
-	static const unsigned char key[] = "01234567890123456789012345678901";
-	/* A 128 bit IV */
-	static const unsigned char iv[] = "0123456789012345";
-	/* Some additional data to be authenticated */
-	static const unsigned char aad[] = "Some AAD data";
 	// Decrypting credentials
 	unsigned char decryptedtext[1024];
 	unsigned char decryptedtextP[1024];
@@ -473,11 +468,27 @@ void retrieve(char P[]){
 	decryptedtextP[cp_lenP] = '\0';
 	printf("Username: [%s]\nPassword: [%s]\n", decryptedtext, decryptedtextP);
 	printf("\033[32m[+] Successfully retrieved [%s] account credentials.\033[0m\n", P);
+	// Echo management
+	struct termios saved_attributes;
+	struct termios term;
+
+	tcgetattr(STDIN_FILENO,&saved_attributes);
+	term = saved_attributes;
+	term.c_lflag = term.c_lflag ^ ECHO;
+	tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
+
+	char c;
+	while((c = getchar()) != '\n' && c != EOF);
+	getchar();
+
+	printf("\e[1;1H\e[2J"); // Clear the screen
+	printf("./Psswd\n");
+	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
 	exit(0);
 }
 
 void delete(char p[]){
-	printf("./Psswd\nDelete an account\n");
+	printf("\nDelete an account\n");
 	int n=0, i=0;
 	DIR *d;
 	struct dirent *dir;
@@ -525,29 +536,36 @@ void delete(char p[]){
 }
 
 int main(int argc, char * argv[]){
+	printf("./Psswd\n");
 	if (argc < 2){
 		fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n");
 		exit(1);
 	}
+
+	// Defining the aad, key and iv
+	const unsigned char key[] = "01234567890123456789012345678901";
+	/* A 128 bit IV */
+	const unsigned char iv[] = "0123456789012345";
+	/* Some additional data to be authenticated */
+	const unsigned char aad[] = "Some AAD data";
+
 	char * path;
 	char  * masterPath;
-	masterPath = getenv("HOME");
-	path = getenv("HOME");
+	masterPath = getenv("HOME"); // Unix exclusive
+	path = getenv("HOME");      // Unix exclusive
 	char masterP[1024];
 	char P[1024];
-	printf("path : [%s], masterPath : [%s]\n", path, masterPath);
 	struct stat st = {0};
 	struct stat buffer;
 	strcpy(P, path);
 	strcat(P, "/.config/Psswd/accounts/");
 	strcpy(masterP, masterPath);
 	strcat(masterP, "/.config/Psswd/details");
-	printf("path : [%s], masterPath : [%s]\n", P, masterP);
 	char * mPS; // Master Password                                No password                 /      With Password
-	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS);}else{pLoad(masterP, &mPS);}
+	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS, key, iv, aad);}else{pLoad(masterP, &mPS, key, iv, aad);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
-	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(P, strdup(argv[2]));}
-	else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P);}
+	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(P, strdup(argv[2]), key, iv, aad);}
+	else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P, key, iv, aad);}
 	else if (strcmp(argv[1], "d") == 0 || strcmp(argv[1], "del") == 0){delete(P);}
 	else{
 		fprintf(stderr, "\033[31m[-] Error: invalid arguments.\033[0m\nCheck \"./Psswd help\" for help.\n");

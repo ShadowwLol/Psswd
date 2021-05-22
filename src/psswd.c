@@ -10,10 +10,55 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <termios.h>
+#include <limits.h>
 
-#define LINE_MAX 3072
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
+#define TAG_SIZE 16
 
+#define CCLEAR "\033[0m"
+#define RED    "\033[31m"
+#define GREEN  "\033[32m"
+#define YELLOW "\033[33m"
+#define BLUE   "\033[34m"
+
+
+
+#define listFiles(P)\
+{\
+	int n=0, i=0;\
+	DIR *d;\
+	struct dirent *dir;\
+	d = opendir(P);\
+	while((dir = readdir(d)) != NULL) {\
+		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )\
+		{\
+		} else {\
+			n++;\
+		}\
+	}\
+	rewinddir(d);\
+	if (n < 1){ exit(EXIT_FAILURE); }\
+	char *files[n];\
+	while((dir = readdir(d)) != NULL) {\
+		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )\
+		{}\
+		else {\
+			files[i]= dir->d_name;\
+			i++;\
+		}\
+	}\
+	rewinddir(d);\
+	for(i=0; i<n; i++){\
+		printf("%d. [%s]\n", i+1, files[i]);\
+	}\
+	char input[1];\
+	FILE * file;\
+	printf("\n> ");\
+	fflush(stdin);\
+	fread(input, sizeof(char),  1, stdin);\
+	if (atoi(input) && atoi(input) <= n){strcat(P, files[atoi(input)-1]);}\
+	else{exit(EXIT_FAILURE);}\
+}
 
 int mkpath(char* file_path, mode_t mode) {
 	assert(file_path && *file_path);
@@ -22,22 +67,21 @@ int mkpath(char* file_path, mode_t mode) {
 		if (mkdir(file_path, mode) == -1) {
 			if (errno != EEXIST) {
 				*p = '/';
-				return -1;
+				return EXIT_FAILURE;
 			}
 		}
 		*p = '/';
 	}
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 int read_master(unsigned char *ciphertext, char *cp_len, unsigned char *tag, char *path) {
     if (!ciphertext || !cp_len || !tag || !path)
-        return 1;
+        return EXIT_FAILURE;
 
     FILE *fp = fopen(path, "r");
 
-    if (!fp)
-        return 1;
+    if (!fp){return EXIT_FAILURE;}
 
     char line[LINE_MAX];
 
@@ -62,20 +106,19 @@ int read_master(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
         }
     }
 
-    if (done != 3)
-        return 1;
+    if (done != 3){return EXIT_FAILURE;}
 
-    return 0;
+    return EXIT_SUCCESS;
 }
 
 int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, char *path, char * ciphertextP, char * cp_len_strP, unsigned char * tagP) {
 	if (!ciphertext || !cp_len || !tag || !path || !ciphertextP || !cp_len_strP || !tagP)
-		return 1;
+		return EXIT_FAILURE;
 
 	FILE *fp = fopen(path, "r");
 
 	if (!fp)
-		return 1;
+		return EXIT_FAILURE;
 
 	char line[LINE_MAX];
 
@@ -112,10 +155,9 @@ int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 		}
 	}
 
-	if (done != 6)
-		return 1;
+	if (done != 6){return EXIT_FAILURE;}
 
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 void handleErrors(void)
@@ -123,7 +165,7 @@ void handleErrors(void)
 	unsigned long errCode;
 
 	printf("An error occurred\n");
-	while(errCode = ERR_get_error())
+	while((errCode = ERR_get_error()))
 	{
 		char *err = ERR_error_string(errCode, NULL);
 		printf("%s\n", err);
@@ -257,31 +299,49 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 		return plaintext_len;
 	} else {
 		/* Verify failed */
-		return -1;
+		return EXIT_FAILURE;
 	}
 }
 
 int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
-	char pass1[1024];
-	char pass2[1024];
+	char pass1[LINE_MAX];
+	char pass2[LINE_MAX];
+	struct termios saved_attributes;
+	struct termios term;
 
 	printf("[+] Successfully built Psswd.\n");
 	mkpath(p, 0755);
-	printf("./Psswd\n");
+	printf("\033[96m./Psswd\033[0m\n");
 	pst:
-	printf("Enter Master Password: ");
-	fgets(mPS, 1024, stdin);
-	if (strlen(mPS) < 3){ fprintf(stderr, "\033[31m[-] Error: Master Password too short.\033[0m\n"); goto pst;}
+	printf("%sEnter Master Password: %s", YELLOW, CCLEAR);
+
+	tcgetattr(STDIN_FILENO,&saved_attributes);
+	term = saved_attributes;
+	term.c_lflag = term.c_lflag ^ ECHO;
+	tcsetattr(STDIN_FILENO, TCSANOW, &term);
+
+	fgets(mPS, LINE_MAX, stdin);
+	if (strlen(mPS) < 3){tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); fprintf(stderr, "\n%s[-] Error: Master Password too short.%s\n", RED, CCLEAR); goto pst;}
 	strcpy(pass1, mPS);
-	printf("Re-enter Master Password: ");
-	fgets(mPS, 1024, stdin);
+
+	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);
+
+	printf("\n%sRe-enter Master Password: %s", YELLOW, CCLEAR);
+
+	tcgetattr(STDIN_FILENO,&saved_attributes);
+	term = saved_attributes;
+	term.c_lflag = term.c_lflag ^ ECHO;
+	tcsetattr(STDIN_FILENO, TCSANOW, &term);
+
+	fgets(mPS, LINE_MAX, stdin);
 	strcpy(pass2, mPS);
-	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "\033[31m[-] Error: passwords do not match.\033[0m\n"); goto pst;}
+	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);
+	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "\n%s[-] Error: passwords do not match.%s\n", RED, CCLEAR); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
 
-	unsigned char cipher[1024];
+	unsigned char cipher[NAME_MAX];
 	int cp_len = 0;
-	unsigned char tag[16];
+	unsigned char tag[TAG_SIZE];
 
 	//Encrypting Master Password
 	cp_len = gcm_encrypt(mPS, strlen(mPS), aad, strlen(aad), key, iv, strlen(iv), cipher, tag);
@@ -292,26 +352,26 @@ int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const u
 	fputs("/", fp);
 	BIO_dump_fp(fp, tag, 14);
 	fclose(fp);
-	return 0;
+	return EXIT_SUCCESS;
 }
 
 int pLoad(char * mP, char * mPS, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
-	char line[1024];
-	char pass1[1024];
+	char line[LINE_MAX];
+	char pass1[LINE_MAX];
 	printf("[+] Successfully loaded Psswd.\n");
 	FILE * fptr = fopen(mP, "r");
-	while (fgets(line, 1024, fptr)){}
+	while (fgets(line, LINE_MAX, fptr)){}
 	fclose(fptr);
 	strcpy(mPS, line);
 
-	unsigned char ciphertext[1024];
-	unsigned char tag[1024];
-	char cp_len_str[1024];
+	unsigned char ciphertext[LINE_MAX];
+	unsigned char tag[LINE_MAX];
+	char cp_len_str[LINE_MAX];
 
 	read_master(ciphertext, cp_len_str, tag, mP);
 	int cp_len = atoi(cp_len_str);
 	// Decrypting credentials
-	unsigned char decryptedtext[1024];
+	unsigned char decryptedtext[LINE_MAX];
 	int decryptedtext_len;
 	decryptedtext_len = gcm_decrypt(ciphertext, cp_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
 	decryptedtext[cp_len] = '\0';
@@ -323,48 +383,48 @@ int pLoad(char * mP, char * mPS, const unsigned char key[], const unsigned char 
 	int lives = 0;
 	mpcheck:
 	if (lives < 3){
-		printf("\nMaster password: ");
+		printf("\n%sMaster password: %s", YELLOW, CCLEAR);
 
 		tcgetattr(STDIN_FILENO,&saved_attributes);
 		term = saved_attributes;
 		term.c_lflag = term.c_lflag ^ ECHO;
 		tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
 
-		char try[1024];
-		fgets(try, 1024, stdin);
+		char try[LINE_MAX];
+		fgets(try, LINE_MAX, stdin);
 		try[strlen(try)-1] = '\0';
 		if (strcmp(try, decryptedtext) != 0){
 			lives ++;
 			tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
 			goto mpcheck;
 		}else{tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);}
-	}else{tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); fprintf(stderr, "\033[31m[-] Error: Max ammount of tries exceeded.\033[31m\n"); exit(1);}
-	return 0;
+	}else{tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); fprintf(stderr, "\n%s[-] Error: Max ammount of tries exceeded.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
+	return EXIT_SUCCESS;
 }
 
 void help(){
-	printf("Help:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr	 \tRetrieves an account.\n\t\td, del\tDeletes an account.\n");
-	exit(0);
+	printf("\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr	 \tRetrieves an account.\n\t\td, del\tDeletes an account.\n");
+	exit(EXIT_SUCCESS);
 }
 
 void add(char P[], char * website, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
-	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: account too short.\033[0m\n"); exit(1);}
+	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "%s[-] Error: account too short.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
 
-	printf("\nAdd a website {%s}\n", website);
-	char username[1024];
-	char password[1024];
-	unsigned char cipherUsername[1024];
+	printf("\n\033[96mAdd a website {%s}\033[0m\n", website);
+	char username[NAME_MAX];
+	char password[NAME_MAX];
+	unsigned char cipherUsername[NAME_MAX];
 	int cpu_len = 0;
 	unsigned char Utag[16];
 
-	unsigned char cipherPassword[1024];
+	unsigned char cipherPassword[NAME_MAX];
 	int cpp_len = 0;
 	unsigned char Ptag[16];
 
 	strcat(P, website);
-	if (access( P, F_OK ) == 0){fprintf(stderr, "\033[31m[-] Error: Account already exists.\033[0m\n"); exit(1);}
+	if (access( P, F_OK ) == 0){fprintf(stderr, "%s[-] Error: Account already exists.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
 	printf("Username: ");
-	fgets(username, 1024, stdin);
+	fgets(username, NAME_MAX, stdin);
 	printf("Password: ");
 
 	// Echo management
@@ -376,11 +436,11 @@ void add(char P[], char * website, const unsigned char key[], const unsigned cha
 	term.c_lflag = term.c_lflag ^ ECHO;
 	tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
 
-	fgets(password, 1024, stdin);
+	fgets(password, NAME_MAX, stdin);
 
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
 
-	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){fprintf(stderr, "\033[31m[-] Error: Username or password too short.\033[0m\n"); exit(1);}
+	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){fprintf(stderr, "%s[-] Error: Username or password too short.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
 	username[strlen(username)-1] = '\0';
 	password[strlen(password)-1] = '\0';
 	//Encrypting username
@@ -400,53 +460,14 @@ void add(char P[], char * website, const unsigned char key[], const unsigned cha
 	fputs("/", fp);
 	BIO_dump_fp(fp, Ptag, 14);
 	fclose(fp);
-	printf("\n\033[32m[+] Successfully added [%s] account.\033[0m\n", P);
-	exit(0);
+	printf("\n%s[+] Successfully added [%s] account.%s\n",GREEN, P, CCLEAR);
+	exit(EXIT_SUCCESS);
 }
 
 void retrieve(char P[], const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
-	printf("\nRetrieve an account.\n");
-	int n=0, i=0;
-	DIR *d;
-	struct dirent *dir;
-	d = opendir(P);
-
-	//Determine the number of files
-	while((dir = readdir(d)) != NULL) {
-		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )
-		{
-
-		} else {
-			n++;
-		}
-	}
-	rewinddir(d);
-	if (n < 1){ exit(1); }
-
-	char *files[n];
-
-	//Put file names into the array
-	while((dir = readdir(d)) != NULL) {
-		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )
-		{}
-		else {
-			files[i]= dir->d_name;
-			i++;
-		}
-	}
-	rewinddir(d);
-
-	for(i=0; i<n; i++){
-		printf("%d. [%s]\n", i+1, files[i]);
-	}
-	char * input[1];
-	FILE * file;
+	printf("\n\033[96mRetrieve an account.\033[0m\n");
+	listFiles(P);
 	char * data[2048];
-	printf("\n> ");
-	fflush(stdin);
-	fread(input, sizeof(char),  1, stdin);
-	if (atoi(input) && atoi(input) <= n){strcat(P, files[atoi(input)-1]);}
-	else{exit(1);}
 	unsigned char ciphertext[1024];
 	unsigned char tag[1024];
 	char cp_len_str[1024];
@@ -467,7 +488,7 @@ void retrieve(char P[], const unsigned char key[], const unsigned char iv[], con
 	decryptedtext[cp_len] = '\0';
 	decryptedtextP[cp_lenP] = '\0';
 	printf("Username: [%s]\nPassword: [%s]\n", decryptedtext, decryptedtextP);
-	printf("\033[32m[+] Successfully retrieved [%s] account credentials.\033[0m\n", P);
+	printf("%s[+] Successfully retrieved [%s] account credentials.%s\n", GREEN, P, CCLEAR);
 	// Echo management
 	struct termios saved_attributes;
 	struct termios term;
@@ -482,64 +503,24 @@ void retrieve(char P[], const unsigned char key[], const unsigned char iv[], con
 	getchar();
 
 	printf("\e[1;1H\e[2J"); // Clear the screen
-	printf("./Psswd\n");
+	printf("\033[96m./Psswd\033[0m\n");
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
-	exit(0);
+	exit(EXIT_SUCCESS);
 }
 
 void delete(char p[]){
-	printf("\nDelete an account\n");
-	int n=0, i=0;
-	DIR *d;
-	struct dirent *dir;
-	d = opendir(p);
-
-	//Determine the number of files
-	while((dir = readdir(d)) != NULL) {
-		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )
-		{
-
-		} else {
-			n++;
-		}
-	}
-	rewinddir(d);
-	if (n < 1){ exit(1); }
-
-	char *files[n];
-
-	//Put file names into the array
-	while((dir = readdir(d)) != NULL) {
-		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )
-		{}
-		else {
-			files[i]= dir->d_name;
-			i++;
-		}
-	}
-	rewinddir(d);
-
-	for(i=0; i<n; i++){
-		printf("%d. [%s]\n", i+1, files[i]);
-	}
-	char * input[1];
-	FILE * file;
-	char * data[2048];
-	printf("\n> ");
-	fflush(stdin);
-	fread(input, sizeof(char),  1, stdin);
-	if (atoi(input) && atoi(input) <= n){strcat(p, files[atoi(input)-1]);}
-	else{exit(1);}
+	printf("\n\033[96mDelete an account\033[0m\n");
+	listFiles(p);
 	remove(p);
-	printf("\033[32m[+] Successfully deleted [%s] account.\033[0m\n", p);
-	exit(0);
+	printf("%s[+] Successfully deleted [%s] account.%s\n", GREEN, p, CCLEAR);
+	exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char * argv[]){
-	printf("./Psswd\n");
+	printf("\033[96m%s\033[0m\n", argv[0]);
 	if (argc < 2){
-		fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n");
-		exit(1);
+		fprintf(stderr, "%s[-] Error: arguments required.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]);
+		exit(EXIT_FAILURE);
 	}
 
 	// Defining the aad, key and iv
@@ -553,8 +534,8 @@ int main(int argc, char * argv[]){
 	char  * masterPath;
 	masterPath = getenv("HOME"); // Unix exclusive
 	path = getenv("HOME");      // Unix exclusive
-	char masterP[1024];
-	char P[1024];
+	char masterP[PATH_MAX];
+	char P[PATH_MAX];
 	struct stat st = {0};
 	struct stat buffer;
 	strcpy(P, path);
@@ -564,12 +545,12 @@ int main(int argc, char * argv[]){
 	char * mPS; // Master Password                                No password                 /      With Password
 	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS, key, iv, aad);}else{pLoad(masterP, &mPS, key, iv, aad);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
-	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){if (argc < 3){fprintf(stderr, "\033[31m[-] Error: arguments required.\033[0m\nCheck \"./Psswd help\" for help.\n"); exit(1);} add(P, strdup(argv[2]), key, iv, aad);}
+	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){(argc < 3) ? fprintf(stderr, "\n%s[-] Error: arguments required.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]), exit(EXIT_FAILURE) : add(P, strdup(argv[2]), key, iv, aad);}
 	else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P, key, iv, aad);}
 	else if (strcmp(argv[1], "d") == 0 || strcmp(argv[1], "del") == 0){delete(P);}
 	else{
-		fprintf(stderr, "\033[31m[-] Error: invalid arguments.\033[0m\nCheck \"./Psswd help\" for help.\n");
-		exit(1);
+		fprintf(stderr, "\n%s[-] Error: invalid arguments.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]);
+		exit(EXIT_FAILURE);
 	}
-	return 0;
+	return EXIT_SUCCESS;
 }

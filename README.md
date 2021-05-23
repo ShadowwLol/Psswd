@@ -12,19 +12,19 @@ A unix password manager featuring AES256 GCM encryption.
 * Run: `./Setup`
 * Output:
 
-```MASTER_KEY: NA7UuZ6T(VQW9(WDyyjkjgR*RyN5cXk5```
+`MASTER_KEY: NA7UuZ6T(VQW9(WDyyjkjgR*RyN5cXk5`
 
-```MASTER_IV: @@*LHC^5rG7O&myw```
+`MASTER_IV: @@*LHC^5rG7O&myw`
 
-```MASTER_AAD: 7ojncEV1HmUZF8KPg^BPZUfVz```
+`MASTER_AAD: 7ojncEV1HmUZF8KPg^BPZUfVz`
 
-```___________________________________________```
+`___________________________________________`
 
-```KEY: P9aBeQc_WXkLB8VxbC96aG&Qnzpc^8P(```
+`KEY: P9aBeQc_WXkLB8VxbC96aG&Qnzpc^8P(`
 
-```IV: gZA0xOh(cGKmM28L```
+`IV: gZA0xOh(cGKmM28L`
 
-```AAD: qSV5kUDs&prvgTp4^UA(dU5O&```
+`AAD: qSV5kUDs&prvgTp4^UA(dU5O&`
         
 
 * *copy generated keys, ivs and aads into their respective variables in src/psswd.c main() function*

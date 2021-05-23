@@ -1,0 +1,22 @@
+#!/bin/bash
+
+keysize=32
+key="$(cat /dev/urandom | tr -dc '(\&\_a-zA-Z0-9\^\*\@' | fold -w ${1:-$keysize} | head -n 1)"
+ivsize=16
+iv="$(cat /dev/urandom | tr -dc '(\&\_a-zA-Z0-9\^\*\@' | fold -w ${1:-$ivsize} | head -n 1)"
+aadsize=25
+aad="$(cat /dev/urandom | tr -dc '(\&\_a-zA-Z0-9\^\*\@' | fold -w ${1:-$aadsize} | head -n 1)"
+
+
+printf "MASTER_KEY: %s\n" $key
+printf "MASTER_IV: %s\n" $iv
+printf "MASTER_AAD: %s\n" $aad
+printf "___________________________________________\n\n"
+
+key="$(cat /dev/urandom | tr -dc '(\&\_a-zA-Z0-9\^\*\@' | fold -w ${1:-$keysize} | head -n 1)"
+iv="$(cat /dev/urandom | tr -dc '(\&\_a-zA-Z0-9\^\*\@' | fold -w ${1:-$ivsize} | head -n 1)"
+aad="$(cat /dev/urandom | tr -dc '(\&\_a-zA-Z0-9\^\*\@' | fold -w ${1:-$aadsize} | head -n 1)"
+
+printf "KEY: %s\n" $key
+printf "IV: %s\n" $iv
+printf "AAD: %s\n" $aad

@@ -10,5 +10,5 @@ A unix password manager featuring AES256 GCM encryption.
 
 ## Compiling:
 * `./Setup`
-* *copy Setup keys, ivs and aads into their respective variables in src/psswd.c main() function*
+* *copy generated keys, ivs and aads into their respective variables in src/psswd.c main() function*
 * `make all`

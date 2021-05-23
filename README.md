@@ -1,6 +1,6 @@
 # Psswd
 A unix password manager featuring AES256 GCM encryption.
-## [*Almost* Finished!]
+## [Finished!]
 ## Features:
 * Quick AES256 GCM encryption
 * Completely offline

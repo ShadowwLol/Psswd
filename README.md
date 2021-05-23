@@ -33,8 +33,8 @@ int main(int argc, char * argv[]){
   
   ...
   
-  // Defining the aad, key and iv
-  const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
+	// Defining the aad, key and iv
+	const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
 	/* A 128 bit IV */
 	const unsigned char iv[16] = "0123456789012345";                  // Replace With IV
 	/* Some additional data to be authenticated */

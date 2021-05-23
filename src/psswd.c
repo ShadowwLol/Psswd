@@ -22,7 +22,7 @@
 #define RED    "\033[31m"
 #define GREEN  "\033[32m"
 #define YELLOW "\033[33m"
-#define BLUE   "\033[34m"
+#define PURPLE "\033[35m"
 
 static char k[ PATH_MAX ];
 static int root_len = 0;
@@ -321,7 +321,7 @@ int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const u
 
 	printf("[+] Successfully built Psswd.\n");
 	mkpath(p, 0755);
-	printf("\033[96m./Psswd\033[0m\n");
+	printf("%s./Psswd%s\n", PURPLE, CCLEAR);
 	pst:
 	printf("%sEnter Master Password: %s", YELLOW, CCLEAR);
 
@@ -420,7 +420,7 @@ void help(){
 void add(char P[], char * website, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
 	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "%s[-] Error: account too short.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
 
-	printf("\n\033[96mAdd a website {%s}\033[0m\n", website);
+	printf("\n%sAdd a website {%s}%s\n", PURPLE, website, CCLEAR);
 	char username[NAME_MAX];
 	char password[NAME_MAX];
 	unsigned char cipherUsername[NAME_MAX];
@@ -475,7 +475,7 @@ void add(char P[], char * website, const unsigned char key[], const unsigned cha
 }
 
 void retrieve(char P[], const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
-	printf("\n\033[96mRetrieve an account.\033[0m\n");
+	printf("\n%sRetrieve an account.%s\n", PURPLE, CCLEAR);
 	listFiles(P);
 	char * data[2048];
 	unsigned char ciphertext[1024];
@@ -513,13 +513,13 @@ void retrieve(char P[], const unsigned char key[], const unsigned char iv[], con
 	getchar();
 
 	printf("\e[1;1H\e[2J"); // Clear the screen
-	printf("\033[96m./Psswd\033[0m\n");
+	printf("%s./Psswd%s\n", PURPLE, CCLEAR);
 	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
 	exit(EXIT_SUCCESS);
 }
 
 void delete(char p[]){
-	printf("\n\033[96mDelete an account\033[0m\n");
+	printf("\n%sDelete an account%s\n", PURPLE, CCLEAR);
 	listFiles(p);
 	remove(p);
 	printf("%s[+] Successfully deleted [%s] account.%s\n", GREEN, p, CCLEAR);
@@ -529,7 +529,7 @@ void delete(char p[]){
 int search_dir ( const char * name )
 {
     struct stat _stbuf;
-    
+
     char pathBak[ PATH_MAX ];
     strcpy(pathBak, k);
     strncat( k, name, PATH_MAX);
@@ -582,7 +582,7 @@ void export(char path[PATH_MAX]){
     if (z != NULL) {
         search_dir(path);
         err = zip_close(z);
-    } 
+    }
 
     if (err != 0) {
         zip_error_to_str(strerr, 1024, err, errno);
@@ -591,7 +591,7 @@ void export(char path[PATH_MAX]){
 }
 
 int main(int argc, char * argv[]){
-	printf("\033[96m%s\033[0m\n", argv[0]);
+	printf("%s%s%s\n", PURPLE, argv[0], CCLEAR);
 	if (argc < 2){
 		fprintf(stderr, "%s[-] Error: arguments required.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]);
 		exit(EXIT_FAILURE);

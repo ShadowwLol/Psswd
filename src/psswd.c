@@ -1,19 +1,22 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <openssl/evp.h>
 #include <openssl/aes.h>
 #include <assert.h>
 #include <openssl/err.h>
 #include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <termios.h>
 #include <limits.h>
+#include <zip.h>
 
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
 #define TAG_SIZE 16
+
+#define ZIP_NAME "Psswd-resources.zip"
 
 #define CCLEAR "\033[0m"
 #define RED    "\033[31m"
@@ -21,7 +24,9 @@
 #define YELLOW "\033[33m"
 #define BLUE   "\033[34m"
 
-
+static char k[ PATH_MAX ];
+static int root_len = 0;
+static struct zip *z = NULL;
 
 #define listFiles(P)\
 {\
@@ -95,12 +100,15 @@ int read_master(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
             if (done == 0)
                 strcpy((char *)ciphertext, line); // Buffer overflow if ciphertext can't store the entire line
             else if (line[0] == '/') {
-                if (done == 1)
-                    strcpy(cp_len, line + 1); // + 1 to ignore the / at the start
-                else if (done == 2)
-                    strcpy((char *)tag, line + 1);
-                else
-                    continue;
+				switch(done){
+					case 1:
+					strcpy(cp_len, line + 1); // + 1 to ignore the / at the start
+					break;
+					case 2:
+					strcpy((char *)tag, line + 1);
+					default:
+					continue;
+				}
             }
             done++;
         }
@@ -132,19 +140,20 @@ int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 			if (done == 0)
 				strcpy((char *)ciphertext, line); // Buffer overflow if ciphertext can't store the entire line
 			else if (line[0] == '/') {
-				if (done == 1){
+				switch(done){
+					case 1:
 					strcpy(cp_len, line + 1); // + 1 to ignore the / at the start
-				}
-				else if (done == 2){
+					break;
+					case 2:
 					strcpy((char *)tag, line + 1);
-				}
-				else if (done == 4){
+					break;
+					case 4:
 					strcpy((char *)cp_len_strP, line+1);
-				}
-				else if (done == 5){
+					break;
+					case 5:
 					strcpy((char *)tagP, line+1);
-				}
-				else{
+					break;
+					default:
 					continue;
 				}
 			}
@@ -403,7 +412,7 @@ int pLoad(char * mP, char * mPS, const unsigned char key[], const unsigned char 
 }
 
 void help(){
-	printf("\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr	 \tRetrieves an account.\n\t\td, del\tDeletes an account.\n");
+	printf("\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr\tRetrieves an account.\n\t\td, del\tDeletes an account.\n\t\texport\tExports account information.\n");
 	exit(EXIT_SUCCESS);
 }
 
@@ -516,6 +525,70 @@ void delete(char p[]){
 	exit(EXIT_SUCCESS);
 }
 
+int search_dir ( const char * name )
+{
+    struct stat _stbuf;
+    
+    char pathBak[ PATH_MAX ];
+    strcpy(pathBak, k);
+    strncat( k, name, PATH_MAX);
+
+    if( stat( k, &_stbuf ) == 0 ) {
+
+        if( S_ISDIR( _stbuf.st_mode )) {
+            DIR * _dir;
+            struct dirent * _file;
+            _dir    =    opendir( k );
+
+            if( _dir ) {
+                strncat( k, "/", PATH_MAX);
+                while(( _file = readdir( _dir )) != NULL ) {
+                    if( strncmp( _file->d_name, ".", 1 ) != 0 ) {
+                        search_dir( _file->d_name);
+                    }
+                }
+                closedir( _dir );
+            }
+            else {
+            	printf( "[-] Failed opening directory: %s\n", k );
+            }
+        }
+        else {
+            struct zip_source *s = zip_source_file(z, k, 0, -1);
+            if(s != NULL) {
+                zip_file_add(z, &k[root_len+1], s, ZIP_FL_OVERWRITE|ZIP_FL_ENC_GUESS);
+            } else {
+                printf( "zip_source_file failed for %s with the reason %s\n", k, zip_strerror(z));
+            }
+        }
+    }
+    else {
+        printf( "stat failed\n" );
+    }
+
+    /* remove parsed name */
+    strcpy(k, pathBak);
+}
+
+void export(char path[PATH_MAX]){
+
+	int err = 0;
+    char strerr[1024];
+
+    root_len = strlen(path);
+    z = zip_open(ZIP_NAME, ZIP_CREATE|ZIP_EXCL, &err);
+
+    if (z != NULL) {
+        search_dir(path);
+        err = zip_close(z);
+    } 
+
+    if (err != 0) {
+        zip_error_to_str(strerr, 1024, err, errno);
+        printf("\n%s[-] Failed exporting information.\nReason: %s%s\n", RED, strerr, CCLEAR);
+    }else{printf("\n%s[+] Successfully exported information.%s\n", GREEN, CCLEAR);}
+}
+
 int main(int argc, char * argv[]){
 	printf("\033[96m%s\033[0m\n", argv[0]);
 	if (argc < 2){
@@ -524,30 +597,40 @@ int main(int argc, char * argv[]){
 	}
 
 	// Defining the aad, key and iv
-	const unsigned char key[] = "01234567890123456789012345678901";
+	const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
 	/* A 128 bit IV */
-	const unsigned char iv[] = "0123456789012345";
+	const unsigned char iv[16] = "0123456789012345";                  // Replace With IV
 	/* Some additional data to be authenticated */
-	const unsigned char aad[] = "Some AAD data";
+	const unsigned char aad[25] = "Some AAD data";                    // Replace with AAD
+
+	// Defining the aad, key and iv
+	const unsigned char MASTER_KEY[32] = "01231231231241243789012345678901"; // Replace with MASTER_KEY
+	/* A 128 bit IV */
+	const unsigned char MASTER_IV[16] = "6536458789016245";//                   Replace with MASTER_IV
+	/* Some additional data to be authenticated */
+	const unsigned char MASTER_AAD[25] = "More aad data";//                     Replace with MASTER_AAD
 
 	char * path;
 	char  * masterPath;
-	masterPath = getenv("HOME"); // Unix exclusive
 	path = getenv("HOME");      // Unix exclusive
 	char masterP[PATH_MAX];
 	char P[PATH_MAX];
+	char exPath[PATH_MAX];
 	struct stat st = {0};
 	struct stat buffer;
 	strcpy(P, path);
 	strcat(P, "/.config/Psswd/accounts/");
-	strcpy(masterP, masterPath);
+	strcpy(masterP, path);
 	strcat(masterP, "/.config/Psswd/details");
+	strcpy(exPath, path);
+	strcat(exPath, "/.config/Psswd/");
 	char * mPS; // Master Password                                No password                 /      With Password
-	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS, key, iv, aad);}else{pLoad(masterP, &mPS, key, iv, aad);}
+	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}else{pLoad(masterP, &mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
 	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){(argc < 3) ? fprintf(stderr, "\n%s[-] Error: arguments required.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]), exit(EXIT_FAILURE) : add(P, strdup(argv[2]), key, iv, aad);}
 	else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P, key, iv, aad);}
 	else if (strcmp(argv[1], "d") == 0 || strcmp(argv[1], "del") == 0){delete(P);}
+	else if (strcmp(argv[1], "export") == 0){export(exPath);}
 	else{
 		fprintf(stderr, "\n%s[-] Error: invalid arguments.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]);
 		exit(EXIT_FAILURE);

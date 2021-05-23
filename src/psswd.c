@@ -620,11 +620,11 @@ int main(int argc, char * argv[]){
 	struct stat st = {0};
 	struct stat buffer;
 	strcpy(P, path);
-	strcat(P, "/.config/Psswd/accounts/");
+	strcat(P, "/.config/Psswdata/accounts/");
 	strcpy(masterP, path);
-	strcat(masterP, "/.config/Psswd/details");
+	strcat(masterP, "/.config/Psswdata/details");
 	strcpy(exPath, path);
-	strcat(exPath, "/.config/Psswd/");
+	strcat(exPath, "/.config/Psswdata/");
 	char * mPS; // Master Password                                No password                 /      With Password
 	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}else{pLoad(masterP, &mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}

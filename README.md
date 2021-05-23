@@ -18,7 +18,7 @@ A unix password manager featuring AES256 GCM encryption.
 
 `MASTER_AAD: 7ojncEV1HmUZF8KPg^BPZUfVz`
 
-`___________________________________________`
+___________________________________________
 
 `KEY: P9aBeQc_WXkLB8VxbC96aG&Qnzpc^8P(`
 

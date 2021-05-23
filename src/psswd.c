@@ -106,6 +106,7 @@ int read_master(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 					break;
 					case 2:
 					strcpy((char *)tag, line + 1);
+					break;
 					default:
 					continue;
 				}

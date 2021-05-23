@@ -30,6 +30,7 @@ A unix password manager featuring AES256 GCM encryption.
 * *copy generated keys, ivs and aads into their respective variables in src/psswd.c main() function*
 
 ```c
+
 int main(int argc, char * argv[]){
   
   ...
@@ -53,4 +54,5 @@ int main(int argc, char * argv[]){
 }
 
 ```
+
 * `make all`

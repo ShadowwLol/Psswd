@@ -1,7 +1,9 @@
+#include <openssl/bn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <openssl/evp.h>
 #include <openssl/aes.h>
+#include <openssl/rand.h>
 #include <assert.h>
 #include <openssl/err.h>
 #include <string.h>
@@ -27,6 +29,22 @@
 static char k[ PATH_MAX ];
 static int root_len = 0;
 static struct zip *z = NULL;
+
+#define CLEAR_SCREEN(){printf("\e[1;1H\e[2J");}
+#define GET_HOME getenv("HOME");
+
+#define ECHO_ON()\
+{\
+	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);\
+}
+
+#define ECHO_OFF()\
+{\
+	tcgetattr(STDIN_FILENO,&saved_attributes);\
+	term = saved_attributes;\
+	term.c_lflag = term.c_lflag ^ ECHO;\
+	tcsetattr(STDIN_FILENO, TCSANOW, &term);\
+}
 
 #define listFiles(P)\
 {\
@@ -64,6 +82,7 @@ static struct zip *z = NULL;
 	if (atoi(input) && atoi(input) <= n){strcat(P, files[atoi(input)-1]);}\
 	else{exit(EXIT_FAILURE);}\
 }
+
 
 int mkpath(char* file_path, mode_t mode) {
 	assert(file_path && *file_path);
@@ -325,27 +344,21 @@ int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const u
 	pst:
 	printf("%sEnter Master Password: %s", YELLOW, CCLEAR);
 
-	tcgetattr(STDIN_FILENO,&saved_attributes);
-	term = saved_attributes;
-	term.c_lflag = term.c_lflag ^ ECHO;
-	tcsetattr(STDIN_FILENO, TCSANOW, &term);
+	ECHO_OFF();
 
 	fgets(mPS, LINE_MAX, stdin);
-	if (strlen(mPS) < 3){tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); fprintf(stderr, "\n%s[-] Error: Master Password too short.%s\n", RED, CCLEAR); goto pst;}
+	if (strlen(mPS) < 3){ECHO_ON(); fprintf(stderr, "\n%s[-] Error: Master Password too short.%s\n", RED, CCLEAR); goto pst;}
 	strcpy(pass1, mPS);
 
-	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);
+	ECHO_ON();
 
 	printf("\n%sRe-enter Master Password: %s", YELLOW, CCLEAR);
 
-	tcgetattr(STDIN_FILENO,&saved_attributes);
-	term = saved_attributes;
-	term.c_lflag = term.c_lflag ^ ECHO;
-	tcsetattr(STDIN_FILENO, TCSANOW, &term);
+	ECHO_OFF();
 
 	fgets(mPS, LINE_MAX, stdin);
 	strcpy(pass2, mPS);
-	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);
+	ECHO_ON();
 	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "\n%s[-] Error: passwords do not match.%s\n", RED, CCLEAR); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
 
@@ -354,6 +367,7 @@ int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const u
 	unsigned char tag[TAG_SIZE];
 
 	//Encrypting Master Password
+
 	cp_len = gcm_encrypt(mPS, strlen(mPS), aad, strlen(aad), key, iv, strlen(iv), cipher, tag);
 	FILE * fp = fopen(mP, "w");
 	fprintf(fp, "%s\n", cipher);
@@ -395,20 +409,17 @@ int pLoad(char * mP, char * mPS, const unsigned char key[], const unsigned char 
 	if (lives < 3){
 		printf("\n%sMaster password: %s", YELLOW, CCLEAR);
 
-		tcgetattr(STDIN_FILENO,&saved_attributes);
-		term = saved_attributes;
-		term.c_lflag = term.c_lflag ^ ECHO;
-		tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
+		ECHO_OFF();
 
 		char try[LINE_MAX];
 		fgets(try, LINE_MAX, stdin);
 		try[strlen(try)-1] = '\0';
 		if (strcmp(try, decryptedtext) != 0){
 			lives ++;
-			tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
+			ECHO_ON();
 			goto mpcheck;
-		}else{tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes);}
-	}else{tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); fprintf(stderr, "\n%s[-] Error: Max ammount of tries exceeded.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
+		}else{ECHO_ON();}
+	}else{ECHO_ON(); fprintf(stderr, "\n%s[-] Error: Max ammount of tries exceeded.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
 	return EXIT_SUCCESS;
 }
 
@@ -441,14 +452,11 @@ void add(char P[], char * website, const unsigned char key[], const unsigned cha
 	struct termios saved_attributes;
 	struct termios term;
 
-	tcgetattr(STDIN_FILENO,&saved_attributes);
-	term = saved_attributes;
-	term.c_lflag = term.c_lflag ^ ECHO;
-	tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
+	ECHO_OFF();
 
 	fgets(password, NAME_MAX, stdin);
 
-	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
+	ECHO_ON();
 
 	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){fprintf(stderr, "%s[-] Error: Username or password too short.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
 	username[strlen(username)-1] = '\0';
@@ -503,18 +511,15 @@ void retrieve(char P[], const unsigned char key[], const unsigned char iv[], con
 	struct termios saved_attributes;
 	struct termios term;
 
-	tcgetattr(STDIN_FILENO,&saved_attributes);
-	term = saved_attributes;
-	term.c_lflag = term.c_lflag ^ ECHO;
-	tcsetattr(STDIN_FILENO, TCSANOW, &term); // Echo off
+	ECHO_OFF();
 
 	char c;
 	while((c = getchar()) != '\n' && c != EOF);
 	getchar();
 
-	printf("\e[1;1H\e[2J"); // Clear the screen
+	CLEAR_SCREEN();
 	printf("%s./Psswd%s\n", PURPLE, CCLEAR);
-	tcsetattr(STDIN_FILENO, TCSANOW, &saved_attributes); // Echo on
+	ECHO_ON();
 	exit(EXIT_SUCCESS);
 }
 
@@ -598,22 +603,23 @@ int main(int argc, char * argv[]){
 	}
 
 	// Defining the aad, key and iv
-	const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
-	/* A 128 bit IV */
-	const unsigned char iv[16] = "0123456789012345";                  // Replace With IV
-	/* Some additional data to be authenticated */
-	const unsigned char aad[25] = "Some AAD data";                    // Replace with AAD
-
-	// Defining the aad, key and iv
 	const unsigned char MASTER_KEY[32] = "01231231231241243789012345678901"; // Replace with MASTER_KEY
 	/* A 128 bit IV */
 	const unsigned char MASTER_IV[16] = "6536458789016245";//                   Replace with MASTER_IV
 	/* Some additional data to be authenticated */
 	const unsigned char MASTER_AAD[25] = "More aad data";//                     Replace with MASTER_AAD
 
+	// Defining the aad, key and iv
+	const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
+	//const unsigned char key[32] = BN_pseudo_rand(BIGNUM *rnd, int bits, int top, int bottom)
+	/* A 128 bit IV */
+	const unsigned char iv[16] = "0123456789012345";                  // Replace With IV
+	/* Some additional data to be authenticated */
+	const unsigned char aad[25] = "Some AAD data";                    // Replace with AAD
+
 	char * path;
 	char  * masterPath;
-	path = getenv("HOME");      // Unix exclusive
+	path = GET_HOME;
 	char masterP[PATH_MAX];
 	char P[PATH_MAX];
 	char exPath[PATH_MAX];

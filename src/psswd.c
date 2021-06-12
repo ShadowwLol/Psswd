@@ -1,9 +1,8 @@
-#include <openssl/bn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <openssl/evp.h>
 #include <openssl/aes.h>
-#include <openssl/rand.h>
+#include <openssl/sha.h>
 #include <assert.h>
 #include <openssl/err.h>
 #include <string.h>
@@ -17,6 +16,9 @@
 
 #define MIN_CRED_SIZE 3 // Minimum size of credentials
 #define TAG_SIZE 16
+#define IV_SIZE 16
+#define KEY_SIZE 32
+#define AAD_SIZE 25
 
 #define ZIP_NAME "Psswd-resources.zip"
 
@@ -610,12 +612,25 @@ int main(int argc, char * argv[]){
 	const unsigned char MASTER_AAD[25] = "More aad data";//                     Replace with MASTER_AAD
 
 	// Defining the aad, key and iv
-	const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
-	//const unsigned char key[32] = BN_pseudo_rand(BIGNUM *rnd, int bits, int top, int bottom)
+	// The data to be hashed
+	/*char data[] = "Hello, world!";
+	size_t length = strlen(data);
+
+	unsigned char hash[KEY_SIZE];
+	SHA1(data, length, hash);*/
+	// hash now contains the 20-byte SHA-1 hash
+
+	//const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
+	unsigned char key[KEY_SIZE];
+	SHA1(MASTER_KEY, KEY_SIZE, key);
 	/* A 128 bit IV */
-	const unsigned char iv[16] = "0123456789012345";                  // Replace With IV
+	//const unsigned char iv[16] = "0123456789012345";                  // Replace With IV
+	unsigned char iv[IV_SIZE];
+	SHA1(MASTER_IV, IV_SIZE, iv);
 	/* Some additional data to be authenticated */
-	const unsigned char aad[25] = "Some AAD data";                    // Replace with AAD
+	//const unsigned char aad[25] = "Some AAD data";                    // Replace with AAD
+	unsigned char aad[AAD_SIZE];
+	SHA1(MASTER_AAD, AAD_SIZE, aad);
 
 	char * path;
 	char  * masterPath;

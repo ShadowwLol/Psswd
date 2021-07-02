@@ -5,7 +5,7 @@
 #include <openssl/sha.h>
 #include <assert.h>
 #include <openssl/err.h>
-#include <string.h>
+#include <bsd/string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -34,6 +34,14 @@ static struct zip *z = NULL;
 
 #define CLEAR_SCREEN(){printf("\e[1;1H\e[2J");}
 #define GET_HOME getenv("HOME");
+
+#define err(msg)\
+{\
+	fprintf(stderr, "%s[-] Error: ", RED);\
+	perror(msg);\
+	fprintf(stderr, "%s", CCLEAR);\
+	exit(EXIT_FAILURE);\
+}
 
 #define ECHO_ON()\
 {\
@@ -334,7 +342,7 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 	}
 }
 
-int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
+int pStartup(char * p, char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsigned char aad[]){
 	char pass1[LINE_MAX];
 	char pass2[LINE_MAX];
 	struct termios saved_attributes;
@@ -349,7 +357,7 @@ int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const u
 	ECHO_OFF();
 
 	fgets(mPS, LINE_MAX, stdin);
-	if (strlen(mPS) < 3){ECHO_ON(); fprintf(stderr, "\n%s[-] Error: Master Password too short.%s\n", RED, CCLEAR); goto pst;}
+	if (strlen(mPS) < 3){ECHO_ON(); err("Master Password too short.\n"); goto pst;}
 	strcpy(pass1, mPS);
 
 	ECHO_ON();
@@ -361,7 +369,7 @@ int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const u
 	fgets(mPS, LINE_MAX, stdin);
 	strcpy(pass2, mPS);
 	ECHO_ON();
-	if (strcmp(pass1, pass2) != 0){fprintf(stderr, "\n%s[-] Error: passwords do not match.%s\n", RED, CCLEAR); goto pst;}
+	if (strcmp(pass1, pass2) != 0){err("Passwords do not match.\n"); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
 
 	unsigned char cipher[NAME_MAX];
@@ -381,7 +389,7 @@ int pStartup(char * p, char * mP, char * mPS, const unsigned char key[], const u
 	return EXIT_SUCCESS;
 }
 
-int pLoad(char * mP, char * mPS, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
+int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsigned char aad[]){
 	char line[LINE_MAX];
 	char pass1[LINE_MAX];
 	printf("[+] Successfully loaded Psswd.\n");
@@ -421,7 +429,7 @@ int pLoad(char * mP, char * mPS, const unsigned char key[], const unsigned char 
 			ECHO_ON();
 			goto mpcheck;
 		}else{ECHO_ON();}
-	}else{ECHO_ON(); fprintf(stderr, "\n%s[-] Error: Max ammount of tries exceeded.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
+	}else{ECHO_ON(); err("Max amount of tries excedeed.\n");}
 	return EXIT_SUCCESS;
 }
 
@@ -430,8 +438,8 @@ void help(){
 	exit(EXIT_SUCCESS);
 }
 
-void add(char P[], char * website, const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
-	if (strlen(website) < MIN_CRED_SIZE){fprintf(stderr, "%s[-] Error: account too short.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
+void add(char P[], char * website, unsigned char key[], unsigned char iv[], unsigned char aad[]){
+	if (strlen(website) < MIN_CRED_SIZE){err("Invalid account length.\n");}
 
 	printf("\n%sAdd a website {%s}%s\n", PURPLE, website, CCLEAR);
 	char username[NAME_MAX];
@@ -445,7 +453,7 @@ void add(char P[], char * website, const unsigned char key[], const unsigned cha
 	unsigned char Ptag[16];
 
 	strcat(P, website);
-	if (access( P, F_OK ) == 0){fprintf(stderr, "%s[-] Error: Account already exists.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
+	if (access( P, F_OK ) == 0){err("Account already exists.\n");}
 	printf("Username: ");
 	fgets(username, NAME_MAX, stdin);
 	printf("Password: ");
@@ -460,7 +468,7 @@ void add(char P[], char * website, const unsigned char key[], const unsigned cha
 
 	ECHO_ON();
 
-	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){fprintf(stderr, "%s[-] Error: Username or password too short.%s\n", RED, CCLEAR); exit(EXIT_FAILURE);}
+	if (strlen(username) < MIN_CRED_SIZE || strlen(password) < MIN_CRED_SIZE){err("Invalid username or password length.\n");}
 	username[strlen(username)-1] = '\0';
 	password[strlen(password)-1] = '\0';
 	//Encrypting username
@@ -484,7 +492,7 @@ void add(char P[], char * website, const unsigned char key[], const unsigned cha
 	exit(EXIT_SUCCESS);
 }
 
-void retrieve(char P[], const unsigned char key[], const unsigned char iv[], const unsigned char aad[]){
+void retrieve(char P[], unsigned char key[], unsigned char iv[], unsigned char aad[]){
 	printf("\n%sRetrieve an account.%s\n", PURPLE, CCLEAR);
 	listFiles(P);
 	char * data[2048];
@@ -539,7 +547,7 @@ int search_dir ( const char * name )
 
     char pathBak[ PATH_MAX ];
     strcpy(pathBak, k);
-    strncat( k, name, PATH_MAX);
+    strlcat( k, name, PATH_MAX);
 
     if( stat( k, &_stbuf ) == 0 ) {
 
@@ -549,7 +557,7 @@ int search_dir ( const char * name )
             _dir    =    opendir( k );
 
             if( _dir ) {
-                strncat( k, "/", PATH_MAX);
+                strlcat( k, "/", PATH_MAX);
                 while(( _file = readdir( _dir )) != NULL ) {
                     if( strncmp( _file->d_name, ".", 1 ) != 0 ) {
                         search_dir( _file->d_name);
@@ -558,7 +566,7 @@ int search_dir ( const char * name )
                 closedir( _dir );
             }
             else {
-            	printf( "[-] Failed opening directory: %s\n", k );
+            	err("Failed opening zip-file directory.\n");
             }
         }
         else {
@@ -566,12 +574,12 @@ int search_dir ( const char * name )
             if(s != NULL) {
                 zip_file_add(z, &k[root_len+1], s, ZIP_FL_OVERWRITE|ZIP_FL_ENC_GUESS);
             } else {
-                printf( "zip_source_file failed for %s with the reason %s\n", k, zip_strerror(z));
+				err("Failed sourcing zip-file.\n");
             }
         }
     }
     else {
-        printf( "stat failed\n" );
+        err("Failed using stat.\n");
     }
 
     /* remove parsed name */
@@ -581,7 +589,6 @@ int search_dir ( const char * name )
 void export(char path[PATH_MAX]){
 
 	int err = 0;
-    char strerr[1024];
 
     root_len = strlen(path);
     z = zip_open(ZIP_NAME, ZIP_CREATE|ZIP_EXCL, &err);
@@ -592,24 +599,20 @@ void export(char path[PATH_MAX]){
     }
 
     if (err != 0) {
-        zip_error_to_str(strerr, 1024, err, errno);
-        printf("\n%s[-] Failed exporting information.\nReason: %s%s\n", RED, strerr, CCLEAR);
+		err("Failed exporting information.\n");
     }else{printf("\n%s[+] Successfully exported information.%s\n", GREEN, CCLEAR);}
 }
 
 int main(int argc, char * argv[]){
 	printf("%s%s%s\n", PURPLE, argv[0], CCLEAR);
-	if (argc < 2){
-		fprintf(stderr, "%s[-] Error: arguments required.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]);
-		exit(EXIT_FAILURE);
-	}
+	if (argc < 2){err("Arguments required.\nCheck \"./Psswd help\" for help.\n");}
 
 	// Defining the aad, key and iv
-	const unsigned char MASTER_KEY[32] = "01231231231241243789012345678901"; // Replace with MASTER_KEY
+	unsigned char MASTER_KEY[32] = "01231231231241243789012345678901"; // Replace with MASTER_KEY
 	/* A 128 bit IV */
-	const unsigned char MASTER_IV[16] = "6536458789016245";//                   Replace with MASTER_IV
+	unsigned char MASTER_IV[16] = "6536458789016245";//                   Replace with MASTER_IV
 	/* Some additional data to be authenticated */
-	const unsigned char MASTER_AAD[25] = "More aad data";//                     Replace with MASTER_AAD
+	unsigned char MASTER_AAD[25] = "More aad data";//                     Replace with MASTER_AAD
 
 	// Defining the aad, key and iv
 	// The data to be hashed
@@ -646,16 +649,16 @@ int main(int argc, char * argv[]){
 	strcat(masterP, "/.config/Psswdata/details");
 	strcpy(exPath, path);
 	strcat(exPath, "/.config/Psswdata/");
-	char * mPS; // Master Password                                No password                 /      With Password
-	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, &mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}else{pLoad(masterP, &mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}
+	char mPS[NAME_MAX]; // Master Password                                No password                 /      With Password
+	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}else{pLoad(masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}
 	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
-	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){(argc < 3) ? fprintf(stderr, "\n%s[-] Error: arguments required.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]), exit(EXIT_FAILURE) : add(P, strdup(argv[2]), key, iv, aad);}
-	else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P, key, iv, aad);}
+	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){
+		if (argc < 3){
+			err("Arguments required.\nCheck \"./Psswd help\" for help.\n");
+		}else{add(P, strdup(argv[2]), key, iv, aad);}
+	}else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P, key, iv, aad);}
 	else if (strcmp(argv[1], "d") == 0 || strcmp(argv[1], "del") == 0){delete(P);}
 	else if (strcmp(argv[1], "export") == 0){export(exPath);}
-	else{
-		fprintf(stderr, "\n%s[-] Error: invalid arguments.%s\nCheck \"%s help\" for help.\n", RED, CCLEAR, argv[0]);
-		exit(EXIT_FAILURE);
-	}
+	else{err("Arguments required.\nCheck \"./Psswd help\" for help.\n");}
 	return EXIT_SUCCESS;
 }

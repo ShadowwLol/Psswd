@@ -38,7 +38,7 @@ static struct zip *z = NULL;
 
 #define err(msg)\
 {\
-	fprintf(stderr, "%s[-] Error: ", RED);\
+	fprintf(stderr, "\n%s[-] Error: ", RED);\
 	perror(msg);\
 	fprintf(stderr, "%s", CCLEAR);\
 	exit(EXIT_FAILURE);\
@@ -64,7 +64,7 @@ static struct zip *z = NULL;
 	struct dirent *dir;\
 	d = opendir(P);\
 	while((dir = readdir(d)) != NULL) {\
-		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )\
+		if ( !strncmp(dir->d_name, ".", 1) || !strncmp(dir->d_name, "..", 2) )\
 		{\
 		} else {\
 			n++;\
@@ -74,7 +74,7 @@ static struct zip *z = NULL;
 	if (n < 1){ exit(EXIT_FAILURE); }\
 	char *files[n];\
 	while((dir = readdir(d)) != NULL) {\
-		if ( !strcmp(dir->d_name, ".") || !strcmp(dir->d_name, "..") )\
+		if ( !strncmp(dir->d_name, ".", 1) || !strncmp(dir->d_name, "..", 2) )\
 		{}\
 		else {\
 			files[i]= dir->d_name;\
@@ -89,7 +89,7 @@ static struct zip *z = NULL;
 	printf("\n> ");\
 	fflush(stdin);\
 	fread(input, sizeof(char),  1, stdin);\
-	if (atoi(input) && atoi(input) <= n){strcat(P, files[atoi(input)-1]);}\
+	if (atoi(input) && atoi(input) <= n){strlcat(P, files[atoi(input)-1], PATH_MAX);}\
 	else{exit(EXIT_FAILURE);}\
 }
 
@@ -187,14 +187,14 @@ int read_master(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 
         if (ll > 0) {
             if (done == 0)
-                strcpy((char *)ciphertext, line); // Buffer overflow if ciphertext can't store the entire line
+                strlcpy((char *)ciphertext, line, LINE_MAX); // Buffer overflow if ciphertext can't store the entire line
             else if (line[0] == '/') {
 				switch(done){
 					case 1:
-					strcpy(cp_len, line + 1); // + 1 to ignore the / at the start
+					strlcpy(cp_len, line + 1, LINE_MAX); // + 1 to ignore the / at the start
 					break;
 					case 2:
-					strcpy((char *)tag, line + 1);
+					strlcpy((char *)tag, line + 1, LINE_MAX);
 					break;
 					default:
 					continue;
@@ -228,27 +228,27 @@ int read_cipher(unsigned char *ciphertext, char *cp_len, unsigned char *tag, cha
 
 		if (ll > 0) {
 			if (done == 0)
-				strcpy((char *)ciphertext, line); // Buffer overflow if ciphertext can't store the entire line
+				strlcpy((char *)ciphertext, line, LINE_MAX); // Buffer overflow if ciphertext can't store the entire line
 			else if (line[0] == '/') {
 				switch(done){
 					case 1:
-					strcpy(cp_len, line + 1); // + 1 to ignore the / at the start
+					strlcpy(cp_len, line + 1, LINE_MAX); // + 1 to ignore the / at the start
 					break;
 					case 2:
-					strcpy((char *)tag, line + 1);
+					strlcpy((char *)tag, line + 1, LINE_MAX);
 					break;
 					case 4:
-					strcpy((char *)cp_len_strP, line+1);
+					strlcpy((char *)cp_len_strP, line+1, LINE_MAX);
 					break;
 					case 5:
-					strcpy((char *)tagP, line+1);
+					strlcpy((char *)tagP, line+1, LINE_MAX);
 					break;
 					default:
 					continue;
 				}
 			}
 			else if (line[0] == '+'){
-				strcpy((char *)ciphertextP, line+1);
+				strlcpy((char *)ciphertextP, line+1, LINE_MAX);
 			}
 			done++;
 		}
@@ -418,7 +418,7 @@ int pStartup(char * p, char * mP, char * mPS, unsigned char key[], unsigned char
 
 	fgets(mPS, LINE_MAX, stdin);
 	if (strlen(mPS) < 3){ECHO_ON(); err("Master Password too short.\n"); goto pst;}
-	strcpy(pass1, mPS);
+	strlcpy(pass1, mPS, LINE_MAX);
 
 	ECHO_ON();
 
@@ -427,9 +427,9 @@ int pStartup(char * p, char * mP, char * mPS, unsigned char key[], unsigned char
 	ECHO_OFF();
 
 	fgets(mPS, LINE_MAX, stdin);
-	strcpy(pass2, mPS);
+	strlcpy(pass2, mPS, LINE_MAX);
 	ECHO_ON();
-	if (strcmp(pass1, pass2) != 0){err("Passwords do not match.\n"); goto pst;}
+	if (strncmp(pass1, pass2, LINE_MAX) != 0){err("Passwords do not match.\n"); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
 
 	unsigned char cipher[NAME_MAX];
@@ -455,7 +455,7 @@ int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsign
 	FILE * fptr = fopen(mP, "r");
 	while (fgets(line, LINE_MAX, fptr)){}
 	fclose(fptr);
-	strcpy(mPS, line);
+	strlcpy(mPS, line, LINE_MAX);
 
 	unsigned char ciphertext[LINE_MAX];
 	unsigned char tag[LINE_MAX];
@@ -482,7 +482,7 @@ int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsign
 		char try[LINE_MAX];
 		fgets(try, LINE_MAX, stdin);
 		try[strlen(try)-1] = '\0';
-		if (strcmp(try, (const char *)decryptedtext) != 0){
+		if (strncmp(try, (const char *)decryptedtext, LINE_MAX) != 0){
 			lives ++;
 			ECHO_ON();
 			goto mpcheck;
@@ -510,7 +510,7 @@ void add(char P[], char * website, unsigned char key[], unsigned char iv[], unsi
 	int cpp_len = 0;
 	unsigned char Ptag[16];
 
-	strcat(P, website);
+	strlcat(P, website, PATH_MAX);
 	if (access( P, F_OK ) == 0){err("Account already exists.\n");}
 	printf("Username: ");
 	fgets(username, NAME_MAX, stdin);
@@ -601,7 +601,7 @@ int search_dir ( const char * name )
     struct stat _stbuf;
 
     char pathBak[ PATH_MAX ];
-    strcpy(pathBak, k);
+    strlcpy(pathBak, k, PATH_MAX);
     strlcat( k, name, PATH_MAX);
 
     if( stat( k, &_stbuf ) == 0 ) {
@@ -638,7 +638,7 @@ int search_dir ( const char * name )
     }
 
     /* remove parsed name */
-    strcpy(k, pathBak);
+    strlcpy(k, pathBak, PATH_MAX);
 	return EXIT_SUCCESS;
 }
 
@@ -698,22 +698,22 @@ int main(int argc, char * argv[]){
 	char exPath[PATH_MAX];
 	struct stat st = {0};
 	struct stat buffer;
-	strcpy(P, path);
-	strcat(P, "/.config/Psswdata/accounts/");
-	strcpy(masterP, path);
-	strcat(masterP, "/.config/Psswdata/details");
-	strcpy(exPath, path);
-	strcat(exPath, "/.config/Psswdata/");
+	strlcpy(P, path, PATH_MAX);
+	strlcat(P, "/.config/Psswdata/accounts/", PATH_MAX);
+	strlcpy(masterP, path, PATH_MAX);
+	strlcat(masterP, "/.config/Psswdata/details", PATH_MAX);
+	strlcpy(exPath, path, PATH_MAX);
+	strlcat(exPath, "/.config/Psswdata/", PATH_MAX);
 	char mPS[NAME_MAX]; // Master Password                                No password                 /      With Password
 	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}else{pLoad(masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}
-	if (strcmp(argv[1], "h") == 0 || strcmp(argv[1], "help") == 0){help();}
-	else if (strcmp(argv[1], "a") == 0 || strcmp(argv[1], "add") == 0){
+	if (strncmp(argv[1], "h", 1) == 0 || strncmp(argv[1], "help", 4) == 0){help();}
+	else if (strncmp(argv[1], "a", 1) == 0 || strncmp(argv[1], "add", 3) == 0){
 		if (argc < 3){
 			err("Arguments required.\nCheck \"./Psswd help\" for help.\n");
 		}else{add(P, strdup(argv[2]), key, iv, aad);}
-	}else if (strcmp(argv[1], "r") == 0 || strcmp(argv[1], "retrieve") == 0){retrieve(P, key, iv, aad);}
-	else if (strcmp(argv[1], "d") == 0 || strcmp(argv[1], "del") == 0){delete(P);}
-	else if (strcmp(argv[1], "export") == 0){export(exPath);}
+	}else if (strncmp(argv[1], "r", 1) == 0 || strncmp(argv[1], "retrieve", 8) == 0){retrieve(P, key, iv, aad);}
+	else if (strncmp(argv[1], "d", 1) == 0 || strncmp(argv[1], "del", 3) == 0){delete(P);}
+	else if (strncmp(argv[1], "export", 6) == 0){export(exPath);}
 	else{err("Arguments required.\nCheck \"./Psswd help\" for help.\n");}
 	return EXIT_SUCCESS;
 }

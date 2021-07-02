@@ -1,6 +1,6 @@
 CC = gcc
-DFLAGS = -lcrypto -lzip -Wall -Wextra -Werror -pedantic
-CFLAGS = -lcrypto -lzip
+DFLAGS = -lcrypto -lzip -lbsd -Wall -Wextra -Werror -pedantic
+CFLAGS = -lcrypto -lzip -lbsd
 #IDIR = ./include/
 SRCDIR = ./src/
 SOURCES = $(SRCDIR)*.c

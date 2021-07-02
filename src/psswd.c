@@ -32,7 +32,8 @@ static char k[ PATH_MAX ];
 static int root_len = 0;
 static struct zip *z = NULL;
 
-#define CLEAR_SCREEN(){printf("\e[1;1H\e[2J");}
+//#define CLEAR_SCREEN printf("\e[1;1H\e[2J");
+//#define CLEAR_SCREEN printf("%c2J", 27);
 #define GET_HOME getenv("HOME");
 
 #define err(msg)\
@@ -85,13 +86,72 @@ static struct zip *z = NULL;
 		printf("%d. [%s]\n", i+1, files[i]);\
 	}\
 	char input[1];\
-	FILE * file;\
 	printf("\n> ");\
 	fflush(stdin);\
 	fread(input, sizeof(char),  1, stdin);\
 	if (atoi(input) && atoi(input) <= n){strcat(P, files[atoi(input)-1]);}\
 	else{exit(EXIT_FAILURE);}\
 }
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+void ClearScreen()
+{
+  HANDLE                     hStdOut;
+  CONSOLE_SCREEN_BUFFER_INFO csbi;
+  DWORD                      count;
+  DWORD                      cellCount;
+  COORD                      homeCoords = { 0, 0 };
+
+  hStdOut = GetStdHandle( STD_OUTPUT_HANDLE );
+  if (hStdOut == INVALID_HANDLE_VALUE) return;
+
+  /* Get the number of cells in the current buffer */
+  if (!GetConsoleScreenBufferInfo( hStdOut, &csbi )) return;
+  cellCount = csbi.dwSize.X *csbi.dwSize.Y;
+
+  /* Fill the entire buffer with spaces */
+  if (!FillConsoleOutputCharacter(
+    hStdOut,
+    (TCHAR) ' ',
+    cellCount,
+    homeCoords,
+    &count
+    )) return;
+
+  /* Fill the entire buffer with the current colors and attributes */
+  if (!FillConsoleOutputAttribute(
+    hStdOut,
+    csbi.wAttributes,
+    cellCount,
+    homeCoords,
+    &count
+    )) return;
+
+  /* Move the cursor home */
+  SetConsoleCursorPosition( hStdOut, homeCoords );
+}
+
+#else // !_WIN32
+#include <unistd.h>
+#include <term.h>
+
+void ClearScreen()
+{
+  if (!cur_term)
+  {
+     int result;
+     setupterm( NULL, STDOUT_FILENO, &result );
+     if (result <= 0) return;
+  }
+
+   putp( tigetstr( "clear" ) );
+}
+#endif
+
+
 
 
 int mkpath(char* file_path, mode_t mode) {
@@ -378,20 +438,19 @@ int pStartup(char * p, char * mP, char * mPS, unsigned char key[], unsigned char
 
 	//Encrypting Master Password
 
-	cp_len = gcm_encrypt(mPS, strlen(mPS), aad, strlen(aad), key, iv, strlen(iv), cipher, tag);
+	cp_len = gcm_encrypt((unsigned char *)mPS, strlen(mPS), aad, strlen((const char *)aad), key, iv, strlen((const char *)iv), cipher, tag);
 	FILE * fp = fopen(mP, "w");
 	fprintf(fp, "%s\n", cipher);
 	fputs("/", fp);
 	fprintf(fp, "%d\n", cp_len);
 	fputs("/", fp);
-	BIO_dump_fp(fp, tag, 14);
+	BIO_dump_fp(fp, (const char *)tag, 14);
 	fclose(fp);
 	return EXIT_SUCCESS;
 }
 
 int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsigned char aad[]){
 	char line[LINE_MAX];
-	char pass1[LINE_MAX];
 	printf("[+] Successfully loaded Psswd.\n");
 	FILE * fptr = fopen(mP, "r");
 	while (fgets(line, LINE_MAX, fptr)){}
@@ -406,8 +465,7 @@ int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsign
 	int cp_len = atoi(cp_len_str);
 	// Decrypting credentials
 	unsigned char decryptedtext[LINE_MAX];
-	int decryptedtext_len;
-	decryptedtext_len = gcm_decrypt(ciphertext, cp_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
+	gcm_decrypt(ciphertext, cp_len, aad, strlen((const char *)aad), tag, key, iv, strlen((const char *)iv), decryptedtext);
 	decryptedtext[cp_len] = '\0';
 
 	// Verification
@@ -424,7 +482,7 @@ int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsign
 		char try[LINE_MAX];
 		fgets(try, LINE_MAX, stdin);
 		try[strlen(try)-1] = '\0';
-		if (strcmp(try, decryptedtext) != 0){
+		if (strcmp(try, (const char *)decryptedtext) != 0){
 			lives ++;
 			ECHO_ON();
 			goto mpcheck;
@@ -472,21 +530,21 @@ void add(char P[], char * website, unsigned char key[], unsigned char iv[], unsi
 	username[strlen(username)-1] = '\0';
 	password[strlen(password)-1] = '\0';
 	//Encrypting username
-	cpu_len = gcm_encrypt(username, strlen(username), aad, strlen(aad), key, iv, strlen(iv), cipherUsername, Utag);
-	cpp_len = gcm_encrypt(password, strlen(password), aad, strlen(aad), key, iv, strlen(iv), cipherPassword, Ptag);
+	cpu_len = gcm_encrypt((unsigned char *)username, strlen(username), aad, strlen((const char *)aad), key, iv, strlen((const char *)iv), cipherUsername, Utag);
+	cpp_len = gcm_encrypt((unsigned char *)password, strlen(password), aad, strlen((const char *)aad), key, iv, strlen((const char *)iv), cipherPassword, Ptag);
 	FILE * fp = fopen(P, "w");
 	fprintf(fp, "%s\n", cipherUsername);
 	fputs("/", fp);
 	fprintf(fp, "%d\n", cpu_len);
 	fputs("/", fp);
-	BIO_dump_fp(fp, Utag, 14);
+	BIO_dump_fp(fp, (const char *)Utag, 14);
 	fputs("+", fp);
 	//Encrypting password
 	fprintf(fp, "%s\n", cipherPassword);
 	fputs("/", fp);
 	fprintf(fp, "%d\n", cpp_len);
 	fputs("/", fp);
-	BIO_dump_fp(fp, Ptag, 14);
+	BIO_dump_fp(fp, (const char *)Ptag, 14);
 	fclose(fp);
 	printf("\n%s[+] Successfully added [%s] account.%s\n",GREEN, P, CCLEAR);
 	exit(EXIT_SUCCESS);
@@ -495,7 +553,6 @@ void add(char P[], char * website, unsigned char key[], unsigned char iv[], unsi
 void retrieve(char P[], unsigned char key[], unsigned char iv[], unsigned char aad[]){
 	printf("\n%sRetrieve an account.%s\n", PURPLE, CCLEAR);
 	listFiles(P);
-	char * data[2048];
 	unsigned char ciphertext[1024];
 	unsigned char tag[1024];
 	char cp_len_str[1024];
@@ -503,16 +560,14 @@ void retrieve(char P[], unsigned char key[], unsigned char iv[], unsigned char a
 	unsigned char ciphertextP[1024];
 	unsigned char tagP[1024];
 	char cp_len_strP[1024];
-	read_cipher(ciphertext, cp_len_str, tag, P, ciphertextP, cp_len_strP, tagP);
+	read_cipher(ciphertext, cp_len_str, tag, P, (char *)ciphertextP, cp_len_strP, tagP);
 	int cp_len = atoi(cp_len_str);
 	int cp_lenP = atoi(cp_len_strP);
 	// Decrypting credentials
 	unsigned char decryptedtext[1024];
 	unsigned char decryptedtextP[1024];
-	int decryptedtext_len;
-	int decryptedtext_lenP;
-	decryptedtext_len = gcm_decrypt(ciphertext, cp_len, aad, strlen(aad), tag, key, iv, strlen(iv), decryptedtext);
-	decryptedtext_lenP = gcm_decrypt(ciphertextP, cp_lenP, aad, strlen(aad), tagP, key, iv, strlen(iv), decryptedtextP);
+	gcm_decrypt(ciphertext, cp_len, aad, strlen((const char *)aad), tag, key, iv, strlen((const char *)iv), decryptedtext);
+	gcm_decrypt(ciphertextP, cp_lenP, aad, strlen((const char *)aad), tagP, key, iv, strlen((const char *)iv), decryptedtextP);
 	decryptedtext[cp_len] = '\0';
 	decryptedtextP[cp_lenP] = '\0';
 	printf("Username: [%s]\nPassword: [%s]\n", decryptedtext, decryptedtextP);
@@ -527,7 +582,7 @@ void retrieve(char P[], unsigned char key[], unsigned char iv[], unsigned char a
 	while((c = getchar()) != '\n' && c != EOF);
 	getchar();
 
-	CLEAR_SCREEN();
+	ClearScreen();
 	printf("%s./Psswd%s\n", PURPLE, CCLEAR);
 	ECHO_ON();
 	exit(EXIT_SUCCESS);
@@ -584,6 +639,7 @@ int search_dir ( const char * name )
 
     /* remove parsed name */
     strcpy(k, pathBak);
+	return EXIT_SUCCESS;
 }
 
 void export(char path[PATH_MAX]){
@@ -636,7 +692,6 @@ int main(int argc, char * argv[]){
 	SHA1(MASTER_AAD, AAD_SIZE, aad);
 
 	char * path;
-	char  * masterPath;
 	path = GET_HOME;
 	char masterP[PATH_MAX];
 	char P[PATH_MAX];

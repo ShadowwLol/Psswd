@@ -150,7 +150,7 @@ void ClearScreen()
 }
 #endif
 
-void sHash(char * hash_method, char * message, char * out, int outSZ){
+void sHash(char * hash_method, unsigned char * message, unsigned char * out, int outSZ){
 	EVP_MD_CTX * mdctx;
 	const EVP_MD * md = EVP_get_digestbyname(hash_method);
 	unsigned char md_val[EVP_MAX_MD_SIZE];
@@ -158,12 +158,12 @@ void sHash(char * hash_method, char * message, char * out, int outSZ){
 
 	mdctx = EVP_MD_CTX_new();
 	EVP_DigestInit_ex(mdctx, md, NULL);
-	EVP_DigestUpdate(mdctx, message, strlen(message));
+	EVP_DigestUpdate(mdctx, message, strlen((char *)message));
 	EVP_DigestFinal_ex(mdctx, md_val, &md_len);
 	EVP_MD_CTX_free(mdctx);
 
 	for (i = 0; i < md_len; i++){
-		sprintf(&out[i*2],"%02x", md_val[i]);
+		sprintf((char *)&out[i*2],"%02x", md_val[i]);
 	}
 	out[outSZ] = '\0';
 	printf("out : %s\n", out);

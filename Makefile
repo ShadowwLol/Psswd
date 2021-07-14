@@ -13,3 +13,7 @@ all:
 
 size:
 	rm -f Psswd; $(CC) $(SOURCES) $(CFLAGS) -Os -o Psswd; ./Psswd
+
+release:
+	rm -f Psswd
+	$(CC) $(SOURCES) $(DFLAGS) -fno-gcse -O3 -o Psswd

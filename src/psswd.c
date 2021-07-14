@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <openssl/evp.h>
 #include <openssl/aes.h>
-#include <openssl/sha.h>
 #include <assert.h>
 #include <openssl/err.h>
 #include <bsd/string.h>
@@ -14,7 +13,7 @@
 #include <limits.h>
 #include <zip.h>
 
-#define MIN_CRED_SIZE 3 // Minimum size of credentials
+#define MIN_CRED_SIZE 5 // Minimum size for credentials
 #define TAG_SIZE 16
 #define IV_SIZE 16
 #define KEY_SIZE 32
@@ -151,8 +150,24 @@ void ClearScreen()
 }
 #endif
 
+void sHash(char * hash_method, char * message, char * out, int outSZ){
+	EVP_MD_CTX * mdctx;
+	const EVP_MD * md = EVP_get_digestbyname(hash_method);
+	unsigned char md_val[EVP_MAX_MD_SIZE];
+	unsigned int md_len, i;
 
+	mdctx = EVP_MD_CTX_new();
+	EVP_DigestInit_ex(mdctx, md, NULL);
+	EVP_DigestUpdate(mdctx, message, strlen(message));
+	EVP_DigestFinal_ex(mdctx, md_val, &md_len);
+	EVP_MD_CTX_free(mdctx);
 
+	for (i = 0; i < md_len; i++){
+		sprintf(&out[i*2],"%02x", md_val[i]);
+	}
+	out[outSZ] = '\0';
+	printf("out : %s\n", out);
+}
 
 int mkpath(char* file_path, mode_t mode) {
 	assert(file_path && *file_path);
@@ -671,25 +686,15 @@ int main(int argc, char * argv[]){
 	unsigned char MASTER_AAD[25] = "More aad data";//                     Replace with MASTER_AAD
 
 	// Defining the aad, key and iv
-	// The data to be hashed
-	/*char data[] = "Hello, world!";
-	size_t length = strlen(data);
-
-	unsigned char hash[KEY_SIZE];
-	SHA1(data, length, hash);*/
-	// hash now contains the 20-byte SHA-1 hash
-
-	//const unsigned char key[32] = "01234567890123456789012345678901"; // Replace with KEY
+	/* A 256 bit IV */
 	unsigned char key[KEY_SIZE];
-	SHA1(MASTER_KEY, KEY_SIZE, key);
+	sHash("sha256", MASTER_KEY, key, KEY_SIZE);
 	/* A 128 bit IV */
-	//const unsigned char iv[16] = "0123456789012345";                  // Replace With IV
 	unsigned char iv[IV_SIZE];
-	SHA1(MASTER_IV, IV_SIZE, iv);
+	sHash("sha256", MASTER_IV, iv, IV_SIZE);
 	/* Some additional data to be authenticated */
-	//const unsigned char aad[25] = "Some AAD data";                    // Replace with AAD
 	unsigned char aad[AAD_SIZE];
-	SHA1(MASTER_AAD, AAD_SIZE, aad);
+	sHash("sha256", MASTER_AAD, aad, AAD_SIZE);
 
 	char * path;
 	path = GET_HOME;

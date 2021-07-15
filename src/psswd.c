@@ -12,6 +12,7 @@
 #include <termios.h>
 #include <limits.h>
 #include <zip.h>
+#include <math.h>
 
 #define MIN_CRED_SIZE 5 // Minimum size for credentials
 #define TAG_SIZE 16
@@ -417,7 +418,7 @@ int gcm_decrypt(unsigned char *ciphertext, int ciphertext_len,
 	}
 }
 
-int pStartup(char * p, char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsigned char aad[]){
+int pStartup(char * p, char * mP, char * mPS, unsigned char * key, unsigned char * iv, unsigned char * aad){
 	char pass1[LINE_MAX];
 	char pass2[LINE_MAX];
 	struct termios saved_attributes;
@@ -447,6 +448,18 @@ int pStartup(char * p, char * mP, char * mPS, unsigned char key[], unsigned char
 	if (strncmp(pass1, pass2, LINE_MAX) != 0){err("Passwords do not match.\n"); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
 
+	
+	// Defining the aad, key and iv
+	key = (unsigned char *)"01231231231241243789012345678901"; // MASTER KEY
+	//sHash("sha256", from, MASTER_KEY, KEY_SIZE);
+	/* A 128 bit IV */
+	iv = (unsigned char *)"6536458789016245";// MASTER IV
+	/* Some additional data to be authenticated */
+	aad = (unsigned char *)"More aad data";// MASTER AAD
+
+	printf("key : %s, iv : %s, aad : %s\n", key, iv, aad);
+
+	
 	unsigned char cipher[NAME_MAX];
 	int cp_len = 0;
 	unsigned char tag[TAG_SIZE];
@@ -464,7 +477,7 @@ int pStartup(char * p, char * mP, char * mPS, unsigned char key[], unsigned char
 	return EXIT_SUCCESS;
 }
 
-int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsigned char aad[]){
+int pLoad(char * mP, char * mPS, unsigned char * key, unsigned char * iv, unsigned char * aad){
 	char line[LINE_MAX];
 	printf("[+] Successfully loaded Psswd.\n");
 	FILE * fptr = fopen(mP, "r");
@@ -478,10 +491,6 @@ int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsign
 
 	read_master(ciphertext, cp_len_str, tag, mP);
 	int cp_len = atoi(cp_len_str);
-	// Decrypting credentials
-	unsigned char decryptedtext[LINE_MAX];
-	gcm_decrypt(ciphertext, cp_len, aad, strlen((const char *)aad), tag, key, iv, strlen((const char *)iv), decryptedtext);
-	decryptedtext[cp_len] = '\0';
 
 	// Verification
 	// Echo management
@@ -497,6 +506,23 @@ int pLoad(char * mP, char * mPS, unsigned char key[], unsigned char iv[], unsign
 		char try[LINE_MAX];
 		fgets(try, LINE_MAX, stdin);
 		try[strlen(try)-1] = '\0';
+
+		// Defining the aad, key and iv
+		key = (unsigned char *)"01231231231241243789012345678901"; // MASTER KEY
+		//sHash("sha256", from, MASTER_KEY, KEY_SIZE);
+		/* A 128 bit IV */
+		iv = (unsigned char *)"6536458789016245"; // MASTER IV
+		/* Some additional data to be authenticated */
+		aad = (unsigned char *)"More aad data"; // MASTER AAD
+
+
+		printf("key : %s, iv : %s, aad : %s\n", key, iv, aad);
+
+		// Decrypting credentials
+		unsigned char decryptedtext[LINE_MAX];
+		gcm_decrypt(ciphertext, cp_len, aad, strlen((const char *)aad), tag, key, iv, strlen((const char *)iv), decryptedtext);
+		decryptedtext[cp_len] = '\0';
+
 		if (strncmp(try, (const char *)decryptedtext, LINE_MAX) != 0){
 			lives ++;
 			ECHO_ON();
@@ -679,22 +705,13 @@ int main(int argc, char * argv[]){
 	if (argc < 2){err("Arguments required.\nCheck \"./Psswd help\" for help.\n");}
 
 	// Defining the aad, key and iv
-	unsigned char MASTER_KEY[32] = "01231231231241243789012345678901"; // Replace with MASTER_KEY
+	unsigned char MASTER_KEY[KEY_SIZE];
+	
+	//sHash("sha256", from, MASTER_KEY, KEY_SIZE);
 	/* A 128 bit IV */
-	unsigned char MASTER_IV[16] = "6536458789016245";//                   Replace with MASTER_IV
+	unsigned char MASTER_IV[IV_SIZE];
 	/* Some additional data to be authenticated */
-	unsigned char MASTER_AAD[25] = "More aad data";//                     Replace with MASTER_AAD
-
-	// Defining the aad, key and iv
-	/* A 256 bit IV */
-	unsigned char key[KEY_SIZE];
-	sHash("sha256", MASTER_KEY, key, KEY_SIZE);
-	/* A 128 bit IV */
-	unsigned char iv[IV_SIZE];
-	sHash("sha256", MASTER_IV, iv, IV_SIZE);
-	/* Some additional data to be authenticated */
-	unsigned char aad[AAD_SIZE];
-	sHash("sha256", MASTER_AAD, aad, AAD_SIZE);
+	unsigned char MASTER_AAD[AAD_SIZE];
 
 	char * path;
 	path = GET_HOME;
@@ -711,6 +728,18 @@ int main(int argc, char * argv[]){
 	strlcat(exPath, "/.config/Psswdata/", PATH_MAX);
 	char mPS[NAME_MAX]; // Master Password                                No password                 /      With Password
 	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}else{pLoad(masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}
+	
+	// Defining the aad, key and iv
+	/* A 256 bit IV */
+	unsigned char key[KEY_SIZE];
+	sHash("sha256", MASTER_KEY, key, KEY_SIZE);
+	/* A 128 bit IV */
+	unsigned char iv[IV_SIZE];
+	sHash("sha256", MASTER_IV, iv, IV_SIZE);
+	/* Some additional data to be authenticated */
+	unsigned char aad[AAD_SIZE];
+	sHash("sha256", MASTER_AAD, aad, AAD_SIZE);
+	
 	if (strncmp(argv[1], "h", 1) == 0 || strncmp(argv[1], "help", 4) == 0){help();}
 	else if (strncmp(argv[1], "a", 1) == 0 || strncmp(argv[1], "add", 3) == 0){
 		if (argc < 3){

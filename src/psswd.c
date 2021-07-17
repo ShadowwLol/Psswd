@@ -12,7 +12,7 @@
 #include <termios.h>
 #include <limits.h>
 #include <zip.h>
-#include <math.h>
+
 
 #define MIN_CRED_SIZE 5 // Minimum size for credentials
 #define TAG_SIZE 16
@@ -85,12 +85,12 @@ static struct zip *z = NULL;
 	for(i=0; i<n; i++){\
 		printf("%d. [%s]\n", i+1, files[i]);\
 	}\
-	char input[1];\
+	char input[5];\
 	printf("\n> ");\
 	fflush(stdin);\
-	fread(input, sizeof(char),  1, stdin);\
+	fgets(input, 5, stdin);\
 	if (atoi(input) && atoi(input) <= n){strlcat(P, files[atoi(input)-1], PATH_MAX);}\
-	else{exit(EXIT_FAILURE);}\
+	else{err("Invalid account index.\n");}\
 }
 
 #ifdef _WIN32
@@ -163,11 +163,15 @@ void sHash(char * hash_method, unsigned char * message, unsigned char * out, int
 	EVP_DigestFinal_ex(mdctx, md_val, &md_len);
 	EVP_MD_CTX_free(mdctx);
 
+	char temp[1024];
+
 	for (i = 0; i < md_len; i++){
-		sprintf((char *)&out[i*2],"%02x", md_val[i]);
+		sprintf((char *)&temp[i*2],"%02x", md_val[i]);
 	}
-	out[outSZ] = '\0';
-	printf("out : %s\n", out);
+	temp[outSZ] = '\0';
+	strlcpy((char *)out, temp, strlen(temp));
+	//printf("out : %s\n", out);
+	return;
 }
 
 int mkpath(char* file_path, mode_t mode) {
@@ -448,16 +452,12 @@ int pStartup(char * p, char * mP, char * mPS, unsigned char * key, unsigned char
 	if (strncmp(pass1, pass2, LINE_MAX) != 0){err("Passwords do not match.\n"); goto pst;}
 	mPS[strlen(mPS)-1] = '\0';
 
-	
 	// Defining the aad, key and iv
-	key = (unsigned char *)"01231231231241243789012345678901"; // MASTER KEY
-	//sHash("sha256", from, MASTER_KEY, KEY_SIZE);
+	sHash("sha256", (unsigned char *)mPS, key, KEY_SIZE);
 	/* A 128 bit IV */
-	iv = (unsigned char *)"6536458789016245";// MASTER IV
+	sHash("sha256", key, iv, IV_SIZE);
 	/* Some additional data to be authenticated */
-	aad = (unsigned char *)"More aad data";// MASTER AAD
-
-	printf("key : %s, iv : %s, aad : %s\n", key, iv, aad);
+	sHash("sha256", iv, aad, AAD_SIZE);
 
 	
 	unsigned char cipher[NAME_MAX];
@@ -508,15 +508,11 @@ int pLoad(char * mP, char * mPS, unsigned char * key, unsigned char * iv, unsign
 		try[strlen(try)-1] = '\0';
 
 		// Defining the aad, key and iv
-		key = (unsigned char *)"01231231231241243789012345678901"; // MASTER KEY
-		//sHash("sha256", from, MASTER_KEY, KEY_SIZE);
+		sHash("sha256", (unsigned char*)try, key, KEY_SIZE);
 		/* A 128 bit IV */
-		iv = (unsigned char *)"6536458789016245"; // MASTER IV
+		sHash("sha256", key, iv, IV_SIZE);
 		/* Some additional data to be authenticated */
-		aad = (unsigned char *)"More aad data"; // MASTER AAD
-
-
-		printf("key : %s, iv : %s, aad : %s\n", key, iv, aad);
+		sHash("sha256", iv, aad, AAD_SIZE);
 
 		// Decrypting credentials
 		unsigned char decryptedtext[LINE_MAX];
@@ -732,13 +728,13 @@ int main(int argc, char * argv[]){
 	// Defining the aad, key and iv
 	/* A 256 bit IV */
 	unsigned char key[KEY_SIZE];
-	sHash("sha256", MASTER_KEY, key, KEY_SIZE);
+	sHash("sha256", MASTER_AAD, key, KEY_SIZE);
 	/* A 128 bit IV */
 	unsigned char iv[IV_SIZE];
-	sHash("sha256", MASTER_IV, iv, IV_SIZE);
+	sHash("sha256", key, iv, IV_SIZE);
 	/* Some additional data to be authenticated */
 	unsigned char aad[AAD_SIZE];
-	sHash("sha256", MASTER_AAD, aad, AAD_SIZE);
+	sHash("sha256", iv, aad, AAD_SIZE);
 	
 	if (strncmp(argv[1], "h", 1) == 0 || strncmp(argv[1], "help", 4) == 0){help();}
 	else if (strncmp(argv[1], "a", 1) == 0 || strncmp(argv[1], "add", 3) == 0){

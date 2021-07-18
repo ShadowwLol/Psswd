@@ -35,6 +35,7 @@ static struct zip *z = NULL;
 //#define CLEAR_SCREEN printf("\e[1;1H\e[2J");
 //#define CLEAR_SCREEN printf("%c2J", 27);
 #define GET_HOME getenv("HOME");
+#define help printf("\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr\tRetrieves an account.\n\t\td, del\tDeletes an account.\n\t\texport\tExports account information.\n");
 
 #define err(msg)\
 {\
@@ -43,6 +44,8 @@ static struct zip *z = NULL;
 	fprintf(stderr, "%s", CCLEAR);\
 	exit(EXIT_FAILURE);\
 }
+
+#define input(input, sz, fd){if (!fgets(input, sz, fd)){err("Failed getting input.\n");}}
 
 #define ECHO_ON()\
 {\
@@ -88,7 +91,7 @@ static struct zip *z = NULL;
 	char input[5];\
 	printf("\n> ");\
 	fflush(stdin);\
-	fgets(input, 5, stdin);\
+	input(input, 5, stdin);\
 	if (atoi(input) && atoi(input) <= n){strlcat(P, files[atoi(input)-1], PATH_MAX);}\
 	else{err("Invalid account index.\n");}\
 }
@@ -166,7 +169,7 @@ void sHash(char * hash_method, unsigned char * message, unsigned char * out, int
 	char temp[1024];
 
 	for (i = 0; i < md_len; i++){
-		sprintf((char *)&temp[i*2],"%02x", md_val[i]);
+		snprintf((char *)&temp[i*2], 1024, "%02x", md_val[i]);
 	}
 	temp[outSZ] = '\0';
 	strlcpy((char *)out, temp, strlen(temp));
@@ -431,25 +434,33 @@ int pStartup(char * p, char * mP, char * mPS, unsigned char * key, unsigned char
 	printf("[+] Successfully built Psswd.\n");
 	mkpath(p, 0755);
 	printf("%s./Psswd%s\n", PURPLE, CCLEAR);
-	pst:
-	printf("%sEnter Master Password: %s", YELLOW, CCLEAR);
+	while(1){
+		printf("%sEnter Master Password: %s", YELLOW, CCLEAR);
 
-	ECHO_OFF();
+		ECHO_OFF();
 
-	fgets(mPS, LINE_MAX, stdin);
-	if (strlen(mPS) < 3){ECHO_ON(); err("Master Password too short.\n"); goto pst;}
-	strlcpy(pass1, mPS, LINE_MAX);
+		input(mPS, LINE_MAX, stdin);
+		if (strlen(mPS) < 3){
+			ECHO_ON();
+			err("Master Password too short.\n");
+		}
+		strlcpy(pass1, mPS, LINE_MAX);
 
-	ECHO_ON();
+		ECHO_ON();
 
-	printf("\n%sRe-enter Master Password: %s", YELLOW, CCLEAR);
+		printf("\n%sRe-enter Master Password: %s", YELLOW, CCLEAR);
 
-	ECHO_OFF();
+		ECHO_OFF();
 
-	fgets(mPS, LINE_MAX, stdin);
-	strlcpy(pass2, mPS, LINE_MAX);
-	ECHO_ON();
-	if (strncmp(pass1, pass2, LINE_MAX) != 0){err("Passwords do not match.\n"); goto pst;}
+		input(mPS, LINE_MAX, stdin);
+		strlcpy(pass2, mPS, LINE_MAX);
+		ECHO_ON();
+		if (strncmp(pass1, pass2, LINE_MAX) != 0){
+			err("Passwords do not match.\n");
+		}else{
+			break;
+		}
+	}
 	mPS[strlen(mPS)-1] = '\0';
 
 	// Defining the aad, key and iv
@@ -497,14 +508,14 @@ int pLoad(char * mP, char * mPS, unsigned char * key, unsigned char * iv, unsign
 	struct termios saved_attributes;
 	struct termios term;
 	int lives = 0;
-	mpcheck:
-	if (lives < 3){
+	while (1){
+		if (lives >= 3){ECHO_ON(); err("Max amount of tries excedeed.\n");}
 		printf("\n%sMaster password: %s", YELLOW, CCLEAR);
 
 		ECHO_OFF();
 
 		char try[LINE_MAX];
-		fgets(try, LINE_MAX, stdin);
+		input(try, LINE_MAX, stdin);
 		try[strlen(try)-1] = '\0';
 
 		// Defining the aad, key and iv
@@ -522,15 +533,10 @@ int pLoad(char * mP, char * mPS, unsigned char * key, unsigned char * iv, unsign
 		if (strncmp(try, (const char *)decryptedtext, LINE_MAX) != 0){
 			lives ++;
 			ECHO_ON();
-			goto mpcheck;
-		}else{ECHO_ON();}
-	}else{ECHO_ON(); err("Max amount of tries excedeed.\n");}
+			continue;
+		}else{ECHO_ON(); break;}
+	}	
 	return EXIT_SUCCESS;
-}
-
-void help(){
-	printf("\nHelp:\n\tPsswd <option>\n\tOptions:\n\t\ta, add\tAdds a new account.\n\t\tr\tRetrieves an account.\n\t\td, del\tDeletes an account.\n\t\texport\tExports account information.\n");
-	exit(EXIT_SUCCESS);
 }
 
 void add(char P[], char * website, unsigned char key[], unsigned char iv[], unsigned char aad[]){
@@ -550,7 +556,7 @@ void add(char P[], char * website, unsigned char key[], unsigned char iv[], unsi
 	strlcat(P, website, PATH_MAX);
 	if (access( P, F_OK ) == 0){err("Account already exists.\n");}
 	printf("Username: ");
-	fgets(username, NAME_MAX, stdin);
+	input(username, NAME_MAX, stdin);
 	printf("Password: ");
 
 	// Echo management
@@ -559,7 +565,7 @@ void add(char P[], char * website, unsigned char key[], unsigned char iv[], unsi
 
 	ECHO_OFF();
 
-	fgets(password, NAME_MAX, stdin);
+	input(password, NAME_MAX, stdin);
 
 	ECHO_ON();
 
@@ -722,7 +728,7 @@ int main(int argc, char * argv[]){
 	strlcat(masterP, "/.config/Psswdata/details", PATH_MAX);
 	strlcpy(exPath, path, PATH_MAX);
 	strlcat(exPath, "/.config/Psswdata/", PATH_MAX);
-	char mPS[NAME_MAX]; // Master Password                                No password                 /      With Password
+	char mPS[LINE_MAX+1]; // Master Password                                No password                 /      With Password
 	if (stat(P, &st) == -1 || stat(masterP,&buffer) == -1){pStartup(P, masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}else{pLoad(masterP, mPS, MASTER_KEY, MASTER_IV, MASTER_AAD);}
 	
 	// Defining the aad, key and iv
@@ -736,7 +742,7 @@ int main(int argc, char * argv[]){
 	unsigned char aad[AAD_SIZE];
 	sHash("sha256", iv, aad, AAD_SIZE);
 	
-	if (strncmp(argv[1], "h", 1) == 0 || strncmp(argv[1], "help", 4) == 0){help();}
+	if (strncmp(argv[1], "h", 1) == 0 || strncmp(argv[1], "help", 4) == 0){help;}
 	else if (strncmp(argv[1], "a", 1) == 0 || strncmp(argv[1], "add", 3) == 0){
 		if (argc < 3){
 			err("Arguments required.\nCheck \"./Psswd help\" for help.\n");

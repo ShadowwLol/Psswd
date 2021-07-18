@@ -13,3 +13,9 @@ To get a **Psswd** executable you can either download it from the [release page]
 * `git clone https://github.com/ShadowwLol/Psswd.git`
 * `cd Psswd`
 * `make release`
+
+## Dependencies:
+In case you choose to go with the dinamic version these dependencies are needed:
+* openssl
+* ncurses
+* libzip
